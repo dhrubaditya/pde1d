@@ -8,10 +8,14 @@ NVCCFLAGS  := -O3
 
 # Output binary name
 #TARGET     := fft_test
-TARGET     := deriv 
+#TARGET     := deriv 
+#TARGET      := spec
+TARGET      := sine
 # Source and object files
 #SRC        := main.cu fft_utils.cu 
-SRC        := deriv_test.cu misc.cu fft_utils.cu 
+#SRC        := deriv_test.cu misc.cu fft_utils.cu 
+#SRC        := test_spec.cu misc.cu fft_utils.cu 
+SRC        := test_sine.cu misc.cu fft_utils.cu 
 OBJ        := $(SRC:.cu=.o)
 
 # Header dependency
@@ -33,7 +37,7 @@ $(TARGET): $(OBJ)
 
 # Clean build artifacts
 clean:
-	rm -f $(OBJ) $(TARGET) *.cu~ *.h~ 
+	rm -f $(TARGET) *.cu~ *.h~ *.o
 
 # Phony targets
 .PHONY: all clean

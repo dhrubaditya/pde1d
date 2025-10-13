@@ -30,12 +30,18 @@ def main():
 
     # --- fixed files to link ---
     fixed_files = [
+        ("./", "start.cu"),
+        ("./", "start.h"),
         ("fft", "fft_utils.cu"),
         ("fft", "fft_utils.h"),
         ("random", "random.cu"),
         ("random", "random.h"),
         ("misc", "misc.cu"),
         ("misc", "misc.h"),
+        ("io", "io.h"),
+        ("io", "io.cu"),
+        ("initcond", "initcond.h"),
+        ("initcond", "initcond.cu"),
     ]
 
     for sub, fname in fixed_files:

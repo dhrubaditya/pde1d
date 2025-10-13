@@ -3,7 +3,15 @@
 #include <cmath>
 #include <cuda_runtime.h>
 #include "fft_utils.h"
-
+#define CUDA_CHECK(call)                                                    \
+    do {                                                                    \
+        cudaError_t err = (call);                                           \
+        if (err != cudaSuccess) {                                           \
+            fprintf(stderr, "CUDA error %s:%d: '%s'\n", __FILE__, __LINE__, \
+                    cudaGetErrorString(err));                               \
+            exit(EXIT_FAILURE);                                             \
+        }                                                                   \
+    } while (0)
 
 int main() {
     int N = 1024;              // number of real samples
@@ -11,6 +19,11 @@ int main() {
     // ----------------------------
     // Allocate FFT array and plan
     // ----------------------------
+    size_t free_mem, total_mem;
+    CUDA_CHECK(cudaMemGetInfo(&free_mem, &total_mem));
+    printf("GPU memory: %.2f / %.2f GB free\n", 
+		 (double)free_mem/1000000.0, 
+		 (double)total_mem/1000000.0);
     FFTArray1D arr = fft_alloc_1d(N);
     FFTPlan1D plan = fft_plan_create_1d(N);
 
@@ -24,13 +37,13 @@ int main() {
     double dk = 1.;
     unsigned long long seed = static_cast<unsigned long long>(time(nullptr));
 //    set_power_law_spectrum(arr, A, xi, kmin, kmax, seed);
-    int kf = 32;
+    int kf = 8;
     set_peak_spectrum(arr, A, dk, kf, seed);
     // ----------------------------
     // Allocate spectrum array on device
     // ----------------------------
     double* d_spectrum;
-    cudaMalloc(&d_spectrum, sizeof(double) * (N/2 + 1));
+    CUDA_CHECK(cudaMalloc(&d_spectrum, sizeof(double) * (N/2 + 1)));
 
     // Compute spectrum |F(k)|^2
     compute_spectrum(arr, d_spectrum);

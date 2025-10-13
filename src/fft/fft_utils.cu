@@ -1,7 +1,65 @@
 #include <curand_kernel.h>
 #include "fft_utils.h"
 #include "misc.h"
+#define CUDA_CHECK(call)                                                    \
+    do {                                                                    \
+        cudaError_t err = (call);                                           \
+        if (err != cudaSuccess) {                                           \
+            fprintf(stderr, "CUDA error %s:%d: '%s'\n", __FILE__, __LINE__, \
+                    cudaGetErrorString(err));                               \
+            exit(EXIT_FAILURE);                                             \
+        }                                                                   \
+    } while (0)
+// ******************************************** //
 
+void copy_FFTArray_host(double* h_arr, FFTArray1D& arr){
+  int N = arr.N;
+  CUDA_CHECK(cudaMemcpy(h_arr, arr.d_real, sizeof(double) * (N + 2),
+			cudaMemcpyDeviceToHost));
+}
+//
+__global__ void B_Adt_kernel(cufftDoubleComplex* A,
+			     cufftDoubleComplex* B,
+			     int N,
+			     double dt){
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < N + 2 ) {
+	B[i].x = A[i].x * dt;
+	B[i].y = A[i].y * dt;
+    }
+}
+//
+void B_Adt_FFTArray(FFTArray1D& A, FFTArray1D& B, double dt){
+  int block = 256;
+  int grid = (A.N + block - 1) / block;
+  B_Adt_kernel<<<grid, block>>>(A.d_complex, B.d_complex, A.N, dt);
+  
+}
+__global__ void copy_array_kernel(double* A, double* B, int M){
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < M ) {
+        B[i] = A[i]; 
+    }
+}
+void copy_FFTArray(FFTArray1D& A, FFTArray1D& B){
+  B.N = A.N;
+  int block = 256;
+  int grid = (A.N + block - 1) / block;
+  copy_array_kernel<<<grid, block>>>(A.d_real, B.d_real, A.N + 2);
+}
+//
+__global__ void cube_array_kernel(double* A, int N){
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < N ) {
+        A[i] = A[i]*A[i]*A[i]; 
+    }
+}
+//
+void cube_FFTArray(FFTArray1D& A){
+  int block = 256;
+  int grid = (A.N + block - 1) / block;
+  cube_array_kernel<<<grid, block>>>(A.d_real, A.N );
+}
 // Forward FFT (real → complex)
 void fft_forward_inplace(const FFTPlan1D& plan, FFTArray1D& arr) {
     cufftExecD2Z(plan.plan_fwd,
@@ -163,7 +221,22 @@ void set_peak_spectrum(FFTArray1D& arr,
                                                   A, dk, kf, seed);
     cudaDeviceSynchronize();
 }
+// ---------------------
+__global__ void set_zero_kernel(double* data, int N){
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= N+2) return;
+    data[i] = 0.0;
+}
 //----------------------------------------
+void set_zero(FFTArray1D& arr){
+    int N = arr.N;
+    int block = 256;
+    int grid = (N + 2+ block - 1) / block; //+2 because the array is N+2
+
+    set_zero_kernel<<<grid, block>>>(arr.d_real, arr.N);
+    cudaDeviceSynchronize();
+}
+//
 __global__ void derivk_kernel(cufftDoubleComplex* data, double hh, int N, bool abs){
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int nfreqs = N / 2 + 1;
@@ -197,4 +270,32 @@ void derivk(FFTArray1D& arr, double hh,  bool abs){
     int block = 256;
     int grid = (nfreqs + block - 1) / block;
     derivk_kernel<<<grid, block>>>(arr.d_complex, hh, arr.N, abs);
+}
+//
+__global__ void sine_kernel(double* data, double dx, double A, int kpeak, int N) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < N) {
+        double x = i * dx;
+	double KPEAK = (double) kpeak;
+        data[i] = A*sin(KPEAK * x);
+    }
+}
+void set_sine_real(double* data, double dx, double A, int kpeak, int N){
+    int block = 256;
+    int grid = (N + block - 1) / block;
+    sine_kernel<<<grid, block>>>(data, dx, A, kpeak, N);
+}
+__global__ void cosine_kernel(double* data, int N, double dx, double A, int kpeak) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < N) {
+        double x = i * dx;
+	double KPEAK = (double) kpeak;
+        data[i] = A*cos(KPEAK * x);
+
+    }
+}
+void set_cosine_real(double* data, double dx, double A, int kpeak, int N){
+    int block = 256;
+    int grid = (N + block - 1) / block;
+    cosine_kernel<<<grid, block>>>(data, N, dx, A, kpeak);
 }

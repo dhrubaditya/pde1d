@@ -73,4 +73,10 @@ void set_peak_spectrum(FFTArray1D& arr,
                                  double A, double dk,
                                  int kf,
                                  unsigned long seed );
+void set_zero(FFTArray1D& arr);
 void derivk(FFTArray1D& arr, double hh,  bool abs);
+void copy_FFTArray(FFTArray1D& A, FFTArray1D& B);
+void cube_FFTArray(FFTArray1D& A);
+void copy_FFTArray_host(double* h_A, FFTArray1D& A);
+void set_sine_real(double* d_data, double dx, double A, int kpeak, int N);
+void set_cosine_real(double* d_data, double dx, double A, int kpeak, int N);
