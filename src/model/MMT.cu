@@ -1,0 +1,62 @@
+#include "misc.h"
+#include "fft_utils.h"
+#include "MMT.h"
+// The Majda, McLaughlin, and Tabak model from J. Nonlin. Sci. Vol 6 pp 6 (1997)
+
+// Define the device constant variable only once
+__constant__ MParams d_Mparams;
+// Read model parameters from file
+MParams read_model_param(){}
+// ------------------------------------------------------
+// Host function to copy parameters to device constant memory
+// ------------------------------------------------------
+void copy_params_to_device(const MParams& h_Mparams)
+{
+    cudaMemcpyToSymbol(d_Mparams, &h_Mparams, sizeof(MMTParams));
+}
+ModelDeviceData Model_allocate_device_memory(int N)
+{
+    ModelDeviceData dev;
+    dev.is_initialized = false;
+    dev.GradBetaPsik = fft_alloc_1d(int N)
+    return dev;
+}
+void Model_free_device_memory(ModelDeviceData& dev)
+{
+    if (dev.d_GradBetaPsik) fft_free_1d(GradBetaPsik);
+    dev.is_initialized = false;
+}
+
+
+void setup_model(){
+  // read model parameters from an input file MMT.in
+  // copy parameters to device 
+  // allocate necessary device memory
+}
+void cleanup_model(){
+  // free device memory
+}
+// ------------------------------------------------------
+// Compute RHS 
+// ------------------------------------------------------
+void compute_rhs(FFTPlan1D& plan, FFTArray1D& Y, FFTArray1D& RHS, double dt)
+{
+  copy_FFTArray(Y, GradBetaPsik);
+  beta = h_MParam.beta;
+  derivk(GradBetaPsik, -beta/4,  1);
+  fft_inverse_inplace(plan, GradBetaPsik);
+  normalize_fft(GradBetaPsik);
+  cube_FFTArray(GradBetaPsik);
+  fft_forward_inplace(plan, GradBetaPsik);
+  derivk(GradBetaPsik, -beta/4, 1);
+  B_Adt_FFTArray(GradBetaPsik, RHS, dt);
+}
+
+// ------------------------------------------------------
+// Energy kernel
+// ------------------------------------------------------
+__global__ void compute_energy_kernel(const double* Y, double* d_E)
+{
+
+}
+
