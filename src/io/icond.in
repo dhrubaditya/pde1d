@@ -1,0 +1,7 @@
+FOURIER = 0
+ITYPE = peak
+A = 1.0
+xi = -2
+kmax = 10
+kmin = 100
+kpeak = 4 
