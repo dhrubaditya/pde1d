@@ -1,5 +1,4 @@
-#ifndef RK4_H
-#define RK4_H
+#pragma once
 
 #include <cuda_runtime.h>
 

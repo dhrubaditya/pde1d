@@ -11,7 +11,23 @@
         }                                                                   \
     } while (0)
 // ******************************************** //
+FFTArray1D fft_alloc_1d(int N) {
+    FFTArray1D arr;
+    arr.N = N;
 
+    size_t bytes = sizeof(double) * (N + 2);
+    CUDA_CHECK(cudaMalloc(&arr.d_real, bytes));
+    arr.d_complex = reinterpret_cast<cufftDoubleComplex*>(arr.d_real);
+
+    return arr;
+}
+//
+void fft_free_1d(FFTArray1D& arr) {
+  CUDA_CHECK(cudaFree(arr.d_real));
+  arr.d_real = nullptr;
+  arr.d_complex = nullptr;
+}
+//
 void copy_FFTArray_host(double* h_arr, FFTArray1D& arr){
   int N = arr.N;
   CUDA_CHECK(cudaMemcpy(h_arr, arr.d_real, sizeof(double) * (N + 2),
@@ -235,6 +251,21 @@ void set_zero(FFTArray1D& arr){
 
     set_zero_kernel<<<grid, block>>>(arr.d_real, arr.N);
     cudaDeviceSynchronize();
+}
+//---------------
+__global__ void  complex_mult_kernel(cufftDoubleComplex* data,
+				     cufftDoubleComplex z, int N){
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
+  int nfreqs = N / 2 + 1;
+  if (i >= nfreqs) return;
+  data[i] = cuCmul(data[i],z);  
+}
+//----------------------------
+void  complex_mult_FFTArray(FFTArray1D& arr, cufftDoubleComplex z){
+  int nfreqs = arr.N / 2 + 1;
+  int block = 256;
+  int grid = (nfreqs + block - 1) / block;
+  complex_mult_kernel<<<grid, block>>>(arr.d_complex, z, arr.N);
 }
 //
 __global__ void derivk_kernel(cufftDoubleComplex* data, double hh, int N, bool abs){

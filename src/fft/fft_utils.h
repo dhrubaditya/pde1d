@@ -11,23 +11,10 @@ struct FFTArray1D {
 };
 
 // Allocate GPU memory for in-place R2C/C2R transforms
-inline FFTArray1D fft_alloc_1d(int N) {
-    FFTArray1D arr;
-    arr.N = N;
-
-    size_t bytes = sizeof(double) * (N + 2);
-    cudaMalloc(&arr.d_real, bytes);
-    arr.d_complex = reinterpret_cast<cufftDoubleComplex*>(arr.d_real);
-
-    return arr;
-}
-
+FFTArray1D fft_alloc_1d(int N);
 // Free memory
-inline void fft_free_1d(FFTArray1D& arr) {
-    cudaFree(arr.d_real);
-    arr.d_real = nullptr;
-    arr.d_complex = nullptr;
-}
+void fft_free_1d(FFTArray1D& arr);
+
 
 // Separate plan management
 struct FFTPlan1D {
@@ -80,3 +67,4 @@ void cube_FFTArray(FFTArray1D& A);
 void copy_FFTArray_host(double* h_A, FFTArray1D& A);
 void set_sine_real(double* d_data, double dx, double A, int kpeak, int N);
 void set_cosine_real(double* d_data, double dx, double A, int kpeak, int N);
+void complex_mult_FFTArray(FFTArray1D& arr, cufftDoubleComplex z);
