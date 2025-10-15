@@ -9,4 +9,9 @@ void test_model_param();
 // ------------------------------------------------------
 // Compute RHS 
 // ------------------------------------------------------
-void compute_rhs(FFTPlan1D& plan, FFTArray1D& Y, FFTArray1D& RHS, double dt);
+void compute_rhs(const double* d_vv, const double* d_psik, double* RHS,
+		 double tt, double dt, int N,
+		 int stage);
+void exp_transform(double* psik, double* vv, double time, int N );
+void exp_inv_transform(double* vv, double* psik, double time, int N );
+

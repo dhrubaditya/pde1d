@@ -68,3 +68,8 @@ void copy_FFTArray_host(double* h_A, FFTArray1D& A);
 void set_sine_real(double* d_data, double dx, double A, int kpeak, int N);
 void set_cosine_real(double* d_data, double dx, double A, int kpeak, int N);
 void complex_mult_FFTArray(FFTArray1D& arr, cufftDoubleComplex z);
+void  double2FFTArray(FFTArray1D& Arr, double* yy, int N){
+  Arr.N = N;
+  Arr.d_real = yy;
+  Arr.d_complex = reinterpret_cast<cufftDoubleComplex*>(Arr.d_real);
+}

@@ -76,6 +76,19 @@ void cube_FFTArray(FFTArray1D& A){
   int grid = (A.N + block - 1) / block;
   cube_array_kernel<<<grid, block>>>(A.d_real, A.N );
 }
+//
+__global__ void quartic_array_kernel(double* A, int N){
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < N ) {
+        A[i] = A[i]*A[i]*A[i]*A[i]; 
+    }
+}
+//
+void quartic_FFTArray(FFTArray1D& A){
+  int block = 256;
+  int grid = (A.N + block - 1) / block;
+  cube_array_kernel<<<grid, block>>>(A.d_real, A.N );
+}
 // Forward FFT (real → complex)
 void fft_forward_inplace(const FFTPlan1D& plan, FFTArray1D& arr) {
     cufftExecD2Z(plan.plan_fwd,

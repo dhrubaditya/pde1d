@@ -3,12 +3,14 @@
 #include <cuda_runtime.h>
 #include <iostream>
 
-// Start Parameters
+// Run Parameters
 struct RParams {
   bool run;
   bool FOURIER;
   int NITER;
   int NAVG;
+  double dt;
+  double TMAX;
 };
 
 

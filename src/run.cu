@@ -11,6 +11,7 @@
 #include "fft_utils.h"
 #include "initcond.h"
 #include "misc.h"
+#include "evolve.h"
 
 #define CUDA_CHECK(call)                                                    \
     do {                                                                    \
@@ -47,55 +48,41 @@ int main() {
     cufftDoubleReal *Ek;
     CUDA_CHECK(cudaMallocHost((void**)&Ek,
     			      sizeof(double) * (N/2 + 1) ));
-    // guest memory
+    // device memory
     FFTArray1D d_psi = fft_alloc_1d(N);
-    FFTPlan1D plan = fft_plan_create_1d(N);
-    double* d_Ek;
-    CUDA_CHECK(cudaMalloc(&d_Ek, sizeof(double) * (N/2 + 1)) );
-
+    //
     std::cout << "Reading run parameters .." << std::endl;
     const RParams h_Rparams = read_Rparams("./input/run.in");
     std::cout << "..done" << std::endl;
-    if(run){
+    if(h_Rparams.run){
       read_initcond(psi, psik, N, RParams);
     }else{
       clean_exit_host("No initial condition, run start first",1);
     }
  // section 3 : Model
-    MParams MP = read_model_param();
+    setup_model(N);
  //  section 4 : timestepping
-    timestep_prelim(h_Sparams, h_Rparams);
-    if (h_Iparams.FOURIER){
-      set_initcond(d_psi, dk, dx, h_Iparams);
-      compute_spectrum(d_psi, d_Ek);
-      normalize_spectrum(d_Ek, N);
-      copy_FFTArray_host(psik, d_psi);
-      fft_inverse_inplace(plan, d_psi);
-      normalize_fft(d_psi);
-      copy_FFTArray_host(psi, d_psi);
-    }else{
-      set_initcond(d_psi, dk, dx, h_Iparams);
-      copy_FFTArray_host(psi, d_psi);
-      fft_forward_inplace(plan, d_psi);
-      compute_spectrum(d_psi, d_Ek);
-      normalize_spectrum(d_Ek, N);
-      copy_FFTArray_host(psik, d_psi);
+    TimeStepDeviceData TStep = TimeStep_allocate_device_memory(N + 2);
+    // N + 2 because of FFT structure
+    DiagData Diag = setup_diag(N);
+    double time = 0.
+    for (int iouter = 0; iouter < h_Rparams.NITER/h_Rparams.NAVG; iouter++){
+      for(int iinner = 0; iinner < h_Rparams.NAVG; iinner++){
+	ExpScheme(d_psi, N + 2, RParams.dt, TStep);
+	time = time + dt;
+      }
+      compute_diag(d_psi, Diag);
     }
-    CUDA_CHECK(cudaMemcpy(Ek, d_Ek, sizeof(double) * (N/2 + 1),
-			  cudaMemcpyDeviceToHost));
-    std::cout << "Writing intial condition to files .." << std::endl;
-    write_initcond(psi, psik, dx, dk, N);
-    std::cout << "..done" << std::endl;
-    std::cout << "Writing intial energy spectrum file .." << std::endl;
-    write_spectrum(Ek, N, dk, 0);
-    std::cout << "..done" << std::endl;
+    write_diag(Diag);
+    write_data(d_psi);
 // endsection
 
 // section : clean up 
-    cudaFreeHost(psi); cudaFreeHost(psik); cudaFreeHost(Ek);
-    fft_plan_destroy_1d(plan);
+    cudaFreeHost(psi); cudaFreeHost(psik);
     fft_free_1d(d_psi);
-    cudaFree(d_Ek);
+    TimeStep_free_device_memory(dev);
+    cleanup_model();
+    std::cout << "Code Exited Cleanly" << std::endl;
 //
     return 0;
 }

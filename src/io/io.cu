@@ -51,6 +51,35 @@ SParams read_Sparams(const char* filename) {
     return p;
 }
 //-------------------------------------------------
+RParams read_Rparams(const char* filename) {
+    RParams p = {};  // zero-initialize
+
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Error: could not open input file " 
+		  << filename << std::endl;
+        exit(EXIT_FAILURE);
+    }
+    std::string line;
+    while (std::getline(file, line)) {
+        std::istringstream iss(line);
+        std::string key, eq;
+        double value;
+
+        // Expected format: key = value
+        if (!(iss >> key >> eq >> value)) continue; // skip malformed lines
+
+        if (key == "run") p.run = value;
+	else if (key == "FOURIER") p.FOURIER = value;
+	else if (key == "NITER") p.NITER = value;
+	else if (key == "NAVG") p.NAVG = value;
+	else if (key == "dt") p.dt = value;
+    }    
+    file.close();
+    p.TMAX = dt * (double) NITER;
+    return p;
+}
+//-------------------------------------------------
 IParams read_icond(const std::string& filename) {
     IParams p;  // start with defaults
 
