@@ -5,6 +5,16 @@
 #include <math.h>
 #include <cuda_runtime.h>
 #include "misc.h"
+#define CUDA_CHECK(call)                                                    \
+    do {                                                                    \
+        cudaError_t err = (call);                                           \
+        if (err != cudaSuccess) {                                           \
+            fprintf(stderr, "CUDA error %s:%d: '%s'\n", __FILE__, __LINE__, \
+                    cudaGetErrorString(err));                               \
+            exit(EXIT_FAILURE);                                             \
+        }                                                                   \
+    } while (0)
+// ******************************************** //
 
 
 __device__ double gaussian(double x, double x_0, double sigma, double A) 
@@ -51,7 +61,84 @@ void clean_exit_host(const std::string &msg,
   // Exit cleanly
   exit(EXIT_SUCCESS);
 }
+// ----------------------------------------------------
+// Initialize reducer (once)
+// ----------------------------------------------------
+void init_Complex_reducer(GpuComplexReducer &ws, int maxN)
+{
+    ws.maxN = maxN;
+    ws.threads = 256;
+    ws.maxBlocks = (maxN / 2 + 1 + ws.threads * 2 - 1) / (ws.threads * 2);
+    cudaMalloc(&ws.d_partial, ws.maxBlocks * sizeof(cufftDoubleComplex));
+}
+void free_Complex_reducer(GpuComplexReducer &ws)
+{
+    cudaFree(ws.d_partial);
+    ws.d_partial = nullptr;
+}
+//------------------
+__global__ void reduceComplexKernel(const cufftDoubleComplex *d_in,
+                                    cufftDoubleComplex *d_out,
+                                    int N_half)
+{
+    extern __shared__ cufftDoubleComplex sdata[];
+
+    unsigned int tid = threadIdx.x;
+    unsigned int i = blockIdx.x * blockDim.x * 2 + threadIdx.x;
+
+    cufftDoubleComplex sum = make_cuDoubleComplex(0.0, 0.0);
+
+    if (i < N_half)
+        sum = cuCadd(sum, d_in[i]);
+    if (i + blockDim.x < N_half)
+        sum = cuCadd(sum, d_in[i + blockDim.x]);
+
+    sdata[tid] = sum;
+    __syncthreads();
+
+    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s)
+            sdata[tid] = cuCadd(sdata[tid], sdata[tid + s]);
+        __syncthreads();
+    }
+
+    if (tid == 0)
+        d_out[blockIdx.x] = sdata[0];
+}
 //
+cufftDoubleComplex gpu_Complex_sum(const cufftDoubleComplex *d_in,
+                                       int N,
+                                       GpuComplexReducer &ws)
+{
+    int nfreq = N / 2 + 1;
+    int threads = ws.threads;
+    int blocks = (nfreq + threads * 2 - 1) / (threads * 2);
+    int smem = threads * sizeof(cufftDoubleComplex);
+
+    const cufftDoubleComplex *input_ptr = d_in;
+    cufftDoubleComplex result;
+
+    // iterative reduction using preallocated buffer
+    while (true) {
+        reduceComplexKernel<<<blocks, threads, smem>>>(input_ptr,
+						       ws.d_partial, nfreq);
+        cudaDeviceSynchronize();
+
+        if (blocks == 1) {
+	  CUDA_CHECK(cudaMemcpy(&result, ws.d_partial,
+				sizeof(cufftDoubleComplex),
+				cudaMemcpyDeviceToHost) );
+            break;
+        }
+
+        nfreq = blocks;
+        blocks = (nfreq + threads * 2 - 1) / (threads * 2);
+        input_ptr = ws.d_partial;
+    }
+
+    return result;
+}
+//----------------------
 void init_reducer(GpuReducer &red, size_t N) {
     const int BLOCK_SIZE = 256;
     size_t gridSize = (N + BLOCK_SIZE - 1) / BLOCK_SIZE;
@@ -68,7 +155,7 @@ void free_reducer(GpuReducer &red) {
 }
 //
 __global__ void reduce_sum(const double *d_Arr, double *d_out, size_t N) {
-    extern __shared__ double sdata[];  // shared memory for partial sums
+    extern __shared__ double sdatar[];  // shared memory for partial sums
 
     unsigned int tid  = threadIdx.x;
     unsigned int i    = blockIdx.x * blockDim.x + threadIdx.x;
@@ -76,19 +163,19 @@ __global__ void reduce_sum(const double *d_Arr, double *d_out, size_t N) {
     // Load elements into shared memory (or 0 if out of bounds)
     double x = 0.0;
     if (i < N) x = d_Arr[i];
-    sdata[tid] = x;
+    sdatar[tid] = x;
     __syncthreads();
 
     // Perform reduction in shared memory
     for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
         if (tid < s)
-            sdata[tid] += sdata[tid + s];
+            sdatar[tid] += sdatar[tid + s];
         __syncthreads();
     }
 
     // Write result for this block to global memory
     if (tid == 0)
-        d_out[blockIdx.x] = sdata[0];
+        d_out[blockIdx.x] = sdatar[0];
 }
 
 //
@@ -120,5 +207,19 @@ __host__ __device__  cufftDoubleComplex exp_cuComplex(cufftDoubleComplex G,
     result.y = exp_real * sin(b * t);
     return result;
 }
-
+//---------------------
+__global__ void mult_Astar_B(cufftDoubleComplex* A,
+			  cufftDoubleComplex* B, int N){
+  // B = A* B
+    int nfreqs = N / 2 + 1;
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < nfreqs) {
+      cufftDoubleComplex C ;
+      C.x = A[i].x * B[i].x + A[i].y * B[i].y ;
+      C.y = A[i].x * B[i].y - A[i].y * B[i].x ;
+      B[i].x = C.x; // stored in B
+      B[i].y = C.y;
+    }
+}
+//---------------------------------------------------------//
 
