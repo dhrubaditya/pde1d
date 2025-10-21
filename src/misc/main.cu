@@ -31,9 +31,24 @@ __global__ void set_complex(cufftDoubleComplex* Z, int N)
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < nfreqs) {
       Z[i].x = 1.;
-      Z[i].y = 0.;
-      if (i == nfreqs -1){Z[i].y = 0.;}
-      if (i == 0){Z[i].y = 0.;}
+      Z[i].y = 1.;
+      if (i == nfreqs -1 || i == 0){Z[i].y = 0.;}
+    }
+}
+// Kernel to set complex array
+__global__ void set_strange_array(cufftDoubleComplex* Z1,
+				 const cufftDoubleComplex* Z2, int N)
+{	
+    int nfreqs = N / 2 + 1;
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < nfreqs) {
+      if(i == nfreqs -1 || i == 0){
+	Z1[i].x = 0.;
+	Z1[i].y = 0.;
+	}else{
+	Z1[i].x = 1 / Z2[i].x;
+	Z1[i].y = -1 / Z2[i].y;
+      }
     }
 }
 
@@ -45,42 +60,50 @@ int main(int argc, char** argv) {
     }
     printf("Grid size N = %d\n", N);
     // ----------------------------
-    // Allocate FFT array and plan
+    // Allocate FFT array 
     // ----------------------------
     FFTArray1D arr = fft_alloc_1d(N);
+    FFTArray1D brr = fft_alloc_1d(N);
     // ----------------------------
     // host allocation
     // ----------------------------
-    /*cufftDoubleComplex* f1;
+    cufftDoubleComplex* f1;
     cufftDoubleComplex* f2;
     cudaMallocHost( (void**)&f1, sizeof(cufftDoubleComplex) * (N/2 + 1) );
-    cudaMallocHost( (void**)&f2, sizeof(cufftDoubleComplex) * (N/2 + 1) );*/
+    cudaMallocHost( (void**)&f2, sizeof(cufftDoubleComplex) * (N/2 + 1) );
     int block = 256;
     int grid = (N + block - 1) / block;
+    // test reduce sum in real space 
     /*init_sin_kernel<<<grid, block>>>(arr.d_real, N, L);
     GpuReducer red;
     init_reducer(red, N);
     double sum = gpu_sum(arr.d_real, N, red);
     std:: cout << sum << "\n"  ;*/
-    /*double* d_real;
+    double* d_real;
     double* d_imag;
     cudaMalloc(&d_real, sizeof(double) * (N/2 + 1));
     cudaMalloc(&d_imag, sizeof(double) * (N/2 + 1));
     unsigned long long seed = static_cast<unsigned long long>(time(nullptr));
     rng_init(seed);
     rng_generate_uniform(d_real, N/2 + 1);
-    rng_generate_uniform(d_imag, N/2 + 1);*/
+    rng_generate_uniform(d_imag, N/2 + 1);
+    //complexify<<<grid, block>>>(arr.d_complex, d_real, d_imag, N);
     set_complex<<<grid, block>>>(arr.d_complex, N);
+    set_strange_array<<<grid, block>>>(brr.d_complex, arr.d_complex, N);
+    //set_complex<<<grid, block>>>(brr.d_complex, N);
+    mult_Astar_B<<<grid, block>>>(brr.d_complex, arr.d_complex, N);
+    // test complex reducer //
+    /*set_complex<<<grid, block>>>(arr.d_complex, N);
     cudaDeviceSynchronize();
     GpuComplexReducer ws;
     init_Complex_reducer(ws, N);
     cufftDoubleComplex csum = gpu_Complex_sum(arr.d_complex,
                                        N, ws);
-    std:: cout << csum.x << " " << csum.y << "\n"  ;
-    /*cudaMemcpy(f1, arr.d_complex, 
+    std:: cout << csum.x << " " << csum.y << "\n"  ; */
+    cudaMemcpy(f1, arr.d_complex, 
 	       sizeof(cufftDoubleComplex) * (N/2 + 1), 
 	       cudaMemcpyDeviceToHost);
-    cufftDoubleComplex II;
+    /*cufftDoubleComplex II;
     II.x = 0;
     II.y = 1;
     complex_mult_FFTArray(arr, II); 
@@ -92,21 +115,20 @@ int main(int argc, char** argv) {
     // ----------------------------
     // Write to file
     // ----------------------------
-    /* std::ofstream fout("data.txt");
+     std::ofstream fout("data.txt");
     for (int k = 0; k < N/2 + 1; ++k) {
-      fout << f1[k].x << " " << f1[k].y << " " << f2[k].x << " "
-	   << f2[k].y << "\n";
+      fout << f1[k].x << " " << f1[k].y << "\n";
     }
-    fout.close(); */
+    fout.close(); 
     // ----------------------------
     // Clean up
     // ----------------------------
-    /*cudaFree(d_real);
+    cudaFree(d_real);
     cudaFree(d_imag);
     cudaFreeHost(f1);
-    cudaFreeHost(f2); */
+    cudaFreeHost(f2); 
     fft_free_1d(arr);
-    free_Complex_reducer(ws);
+    //free_Complex_reducer(ws);
     //free_reducer(red);
     std::cout << "output written to data.txt\n";
     return 0;

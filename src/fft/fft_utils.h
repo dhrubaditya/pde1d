@@ -6,8 +6,10 @@
 // Structure for data buffers (no plans)
 struct FFTArray1D {
     int N;                          // number of real samples
-    double* d_real;                 // pointer to real data (N doubles)
-    cufftDoubleComplex* d_complex;  // pointer to complex data (N/2 + 1 complex numbers)
+    double* d_real = nullptr;       // pointer to real data (N doubles)
+    cufftDoubleComplex* d_complex = nullptr;// pointer to complex data
+                                            //(N/2 + 1 complex numbers)
+    bool IsFourier = true;
 };
 
 // Allocate GPU memory for in-place R2C/C2R transforms
@@ -59,17 +61,15 @@ void set_power_law_spectrum(FFTArray1D& arr,
 void set_peak_spectrum(FFTArray1D& arr,
                                  double A, double dk,
                                  int kf,
-                                 unsigned long seed );
+                                 unsigned long seed,
+	                         bool sharp);
 void set_zero(FFTArray1D& arr);
 void derivk(FFTArray1D& arr, double hh,  bool abs);
-void copy_FFTArray(FFTArray1D& A, FFTArray1D& B);
+void copy_FFTArray(const FFTArray1D& A, FFTArray1D& B);
 void cube_FFTArray(FFTArray1D& A);
 void copy_FFTArray_host(double* h_A, FFTArray1D& A);
 void set_sine_real(double* d_data, double dx, double A, int kpeak, int N);
 void set_cosine_real(double* d_data, double dx, double A, int kpeak, int N);
 void complex_mult_FFTArray(FFTArray1D& arr, cufftDoubleComplex z);
-void  double2FFTArray(FFTArray1D& Arr, double* yy, int N){
-  Arr.N = N;
-  Arr.d_real = yy;
-  Arr.d_complex = reinterpret_cast<cufftDoubleComplex*>(Arr.d_real);
-}
+void  double2FFTArray(FFTArray1D& Arr, double* yy, int N);
+void copy_FFTArray_host_complex(cufftDoubleComplex* h_arr, FFTArray1D& arr);

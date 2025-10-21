@@ -5,6 +5,7 @@
 #include <sys/stat.h> 
 #include <cufft.h>      
 #include "io.h"
+#include "misc.h"
 //-----------
 #define CUDA_CHECK(call)                                                    \
     do {                                                                    \
@@ -76,7 +77,7 @@ RParams read_Rparams(const char* filename) {
 	else if (key == "dt") p.dt = value;
     }    
     file.close();
-    p.TMAX = dt * (double) NITER;
+    p.TMAX = p.dt * (double) p.NITER;
     return p;
 }
 //-------------------------------------------------
@@ -86,6 +87,7 @@ IParams read_icond(const std::string& filename) {
     std::ifstream in(filename);
     if (!in) {
         std::cerr << "Error: cannot open " << filename << " for reading\n";
+	clean_exit_host("No input file", 1);
         return p;  // return defaults if file missing
     }
 
@@ -143,7 +145,34 @@ void write_spectrum(const double* spectrum, int N, double dk, int Q)
     out.close();
 }
 
-//
+//--------------------------
+void write_complex_array(cufftDoubleComplex* psik, 
+			 double dk, int N, const std::string& fname)
+{
+    // --- Ensure "data" directory exists ---
+    mkdir("data", 0755);
+    std::string fpath = "data/" + fname;
+
+    // --- 1. Write real-space data ---
+    std::ofstream fcomplex(fpath);
+    if (!fcomplex) {
+        std::cerr << "Error: cannot open data/initcond_real.dat\n";
+	clean_exit_host("write_complex_array: cannot open file", 1);
+        return;
+    }
+
+    fcomplex << std::scientific << std::setprecision(8);
+    std::cout << "still ok \n";
+    for (int i = 0; i < N/2 + 1; i++) {
+        double k = i * dk;
+        double re = psik[i].x;
+        double im = psik[i].y;
+	std::cout << i << " " << re << " " << im << "\n";
+        fcomplex << k << " " << re << " " << im << "\n";
+    }
+    fcomplex.close();
+}
+//----------------------------
 void write_initcond(const double* psi, const double* psik, double dx,
 		    double dk, int N)
 {

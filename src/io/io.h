@@ -16,3 +16,5 @@ void write_initcond(const double* psi,
 //void read_initcond(double* psi,
 //   double* psik, int N, RParams RP);
 void write_spectrum(const double* Ek, int N, double dk, int Q);
+void write_complex_array(cufftDoubleComplex* psik,
+			 double dk, int N, const std::string& fname);

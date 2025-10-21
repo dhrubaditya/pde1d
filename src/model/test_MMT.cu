@@ -29,8 +29,6 @@ int main(int argc, char** argv){
        }
      }
      printf("Grid size N = %d\n", N);
-     double dx = L/(double) N;
-     double dk = 2 * M_PI/ L ;
      // section 3 : Model
      setup_model(N);
      test_model_param();

@@ -32,8 +32,9 @@ int main(int argc, char** argv){
     FFTPlan1D plan = fft_plan_create_1d(N);
 
     // ----------------------------
-    // Initialize array directly on device
+    // Initialize array directly on device in real space
     // ----------------------------
+    arr.IsFourier = false;
     int block = 256;
     int grid = (N + block - 1) / block;
     init_sin_kernel<<<grid, block>>>(arr.d_real, N, L);
@@ -49,7 +50,7 @@ int main(int argc, char** argv){
     // ----------------------------
     // Calculate its first derivative and store in-place
     // ----------------------------
-    derivk(arr, -1., 0);
+    derivk(arr, -1./4., true);
     // then inverse fft
     fft_inverse_inplace(plan, arr);
     normalize_fft(arr);

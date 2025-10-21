@@ -30,6 +30,8 @@ def main():
 
     # --- fixed files to link ---
     fixed_files = [
+        ("./", "run.cu"),
+        ("./", "run.h"),
         ("./", "start.cu"),
         ("./", "start.h"),
         ("fft", "fft_utils.cu"),

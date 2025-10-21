@@ -27,18 +27,17 @@ struct MParams {
 };
 bool mem_allocated;
 FFTPlan1D plan;
-FFTArray1D GradBetaPsik;
+FFTArray1D NLIN;
 FFTArray1D GradAlphaPsik;
 double* d_Hr;
 MParams h_MP;
 GpuReducer red;
 // Define the device constant variable only once
 __constant__ MParams d_MP;
-// Read model parameters from file
 // ------------------------------------------------------
 // Host function to copy parameters to device constant memory
 // ------------------------------------------------------
-void copy_params_to_device(const MParams& h_Mparams)
+void copy_params_to_device(const MParams& h_MP)
 {
   CUDA_CHECK(cudaMemcpyToSymbol(d_MP, &h_MP, sizeof(MParams)) );
 }
@@ -51,6 +50,7 @@ void read_mparams(const char* filename){
   if (!file.is_open()) {
     std::cerr << "Error: could not open parameter file " 
 	      << filename << std::endl;
+    clean_exit_host("model input file not found",1);
     exit(EXIT_FAILURE);
   }
   std::string line;
@@ -89,7 +89,7 @@ void setup_model(int N){
   // copy parameters to device 
   copy_params_to_device(h_MP);
   // allocate necessary device memory
-  GradBetaPsik = fft_alloc_1d(N);
+  NLIN = fft_alloc_1d(N);
   GradAlphaPsik = fft_alloc_1d(N);
   plan = fft_plan_create_1d(N);
   size_t bytes = sizeof(double) * N;
@@ -101,8 +101,8 @@ void setup_model(int N){
 void model_free_device_memory()
 {
   if(mem_allocated){
-    fft_free_1d(GradBetaPsik);
-    fft_free_1d(GradBetaPsik);
+    fft_free_1d(NLIN);
+    fft_free_1d(GradAlphaPsik);
     mem_allocated = false;
   }else{
     clean_exit_host("model: cannot deallocate model dev mem.", 1);
@@ -176,16 +176,16 @@ double Hamiltonian(FFTPlan1D& plan, FFTArray1D& psik){
   int N = psik.N;
   double alpha = h_MP.alpha;
   double beta = h_MP.beta;
-  copy_FFTArray(psik, GradBetaPsik); // psi(k)
-  derivk(GradBetaPsik, -beta/4,  1); //|del|^{-\beta/4}psi(k)
-  fft_inverse_inplace(plan, GradBetaPsik);
-  normalize_fft(GradBetaPsik); //|del|^{-\beta/4}psi(r)
+  copy_FFTArray(psik, NLIN); // psi(k)
+  derivk(NLIN, -beta/4,  true); //|del|^{-\beta/4}psi(k)
+  fft_inverse_inplace(plan, NLIN);
+  normalize_fft(NLIN); //|del|^{-\beta/4}psi(r)
   
   copy_FFTArray(psik, GradAlphaPsik); // psi(k)
-  derivk(GradAlphaPsik, alpha/2,  1); //|del|^{\alpha/2}psi(k)
+  derivk(GradAlphaPsik, alpha/2,  true); //|del|^{\alpha/2}psi(k)
   fft_inverse_inplace(plan, GradAlphaPsik);
   normalize_fft(GradAlphaPsik); //|del|^{\alpha/2}psi(r)
-  compute_Hr(GradAlphaPsik, GradBetaPsik);
+  compute_Hr(GradAlphaPsik, NLIN);
   double HH = gpu_sum(d_Hr, N, red);
   return HH;
 }
@@ -222,7 +222,7 @@ __global__ void vv_to_psik__kernel(const cufftDoubleComplex* d_vv,
   double kk = (double) i;
   cufftDoubleComplex G = Green(kk);
   cufftDoubleComplex eGt = exp_cuComplex(G, time);
-  d_psi[i] = cuCmul(eGt, d_vv[i]);
+  d_psik[i] = cuCmul(eGt, d_vv[i]);
   }
 }
 void exp_inv_transform(double* vv, double* psik, double time, int N ){
@@ -251,7 +251,7 @@ void exp_transform(double* psik, double* vv, double time, int N ){
 				      time, N);
 }
 //---------------------
-__global__ mult_prefactor_rhsv_kernel(cufftDoubleComplex* d_psi4,
+__global__ void mult_prefactor_rhsv_kernel(cufftDoubleComplex* d_psi4,
 			       cufftDoubleComplex* vrhs,
 			       double time, double dt,
 			       int N){
@@ -263,40 +263,82 @@ __global__ mult_prefactor_rhsv_kernel(cufftDoubleComplex* d_psi4,
   cufftDoubleComplex rhs;
   double kk = (double) i;  
   if (time == 0){
-    rhs = d_psi4;}
-  else{
+    rhs.x = d_psi4[i].x ;
+    rhs.y = d_psi4[i].y ;
+  }else{
     cufftDoubleComplex G = Green(kk);
     cufftDoubleComplex emGt = exp_cuComplex(G, -time);
     rhs = cuCmul(emGt,d_psi4[i]);
   }
-  vrhs[i].x =    dt * rhs.y / pow(kk, h_MP.beta)  ;
-  vrhs[i].y = -  dt * rhs.x / pow(kk, h_MP.beta);    
+  vrhs[i].x =    dt * rhs.y / pow(kk, d_MP.beta)  ;
+  vrhs[i].y = -  dt * rhs.x / pow(kk, d_MP.beta);    
+}
+//---------------------
+void compute_nlin(const FFTArray1D& psik){
+  copy_FFTArray(psik, NLIN); // NLIN = psi(k)
+  double beta = h_MP.beta;
+  double Epsilon = h_MP.Epsilon;
+  std::cout << beta << "\n";
+  derivk(NLIN, -beta/4,  true); //k^{-\beta/4}psi
+  fft_inverse_inplace(plan, NLIN);
+  normalize_fft(NLIN); //F^{-1}(k^{-\beta/4}psi)
+  cube_FFTArray(NLIN); //( F^{-1}(k^{-\beta/4}psi) )^3 
+  fft_forward_inplace(plan, NLIN); //
+                          //F( (F^{-1}(|del|^{-\beta/4}psi) )^3 )
+  derivk(NLIN, -beta/4, true); //
+                          //(k^{-beta/4}F( (F^{-1}(|del|^{-\beta/4}psi) )^3 )
 }
 //---------------------
 void compute_rhsv(const FFTArray1D& psik, FFTArray1D& rhs,
 		  double time, double dt){
-  copy_FFTArray(psik, GradBetaPsik); // psi(k)
-  double beta = h_MP.beta;
-  double Epsilon = h_MP.Epsilon;
-  derivk(GradBetaPsik, -beta/4,  1); //|del|^{-\beta/4}psi(k)
-  fft_inverse_inplace(plan, GradBetaPsik);
-  normalize_fft(GradBetaPsik); //F^{-1}(|del|^{-\beta/4}psi)
-  cube_FFTArray(GradBetaPsik); //( F^{-1}(|del|^{-\beta/4}psi) )^3 
-  fft_forward_inplace(plan, GradBetaPsik); //
-                          //F( (F^{-1}(|del|^{-\beta/4}psi) )^3 )
+  compute_nlin(psik); // the nlin term is stored in NLIN 
   int N = psik.N;
   int nfreqs = N / 2 + 1;
   int block = 256;
   int grid = (nfreqs + block - 1) / block;
-  mult_prefactor_rhsv_kernel<<<grid, block>>>(GradBetaPsik.d_complex,
+  mult_prefactor_rhsv_kernel<<<grid, block>>>(NLIN.d_complex,
 				       rhs.d_complex, time, dt, N); 
+}
+//-------------------
+cufftDoubleComplex compute_NN_nlin(const FFTArray1D& psik){
+  int N = psik.N;
+  int nfreqs = N / 2 + 1;
+  int block = 256;
+  int grid = (nfreqs + block - 1) / block;
+  mult_Astar_B<<<grid, block>>>(psik.d_complex,
+				NLIN.d_complex, N);
+  GpuComplexReducer ws;
+  init_Complex_reducer(ws, N);
+  cufftDoubleComplex sum = gpu_Complex_sum(NLIN.d_complex,
+					       N, ws);
+  free_Complex_reducer(ws);
+  return sum;
+}
+//-----------------
+cufftDoubleComplex test_NN_conservation(FFTArray1D& psik){
+  if (NLIN.d_complex == nullptr)
+    { printf("something is wrong \n");
+      clean_exit_host("FFT1DArray NLIN not allocated", 1);
+    }
+  compute_nlin(psik);
+  cufftDoubleComplex Z = compute_NN_nlin(psik);
+  return Z;
+}
+void copy_NLIN2host(cufftDoubleComplex* h_nlin, const FFTArray1D& d_psi)
+{
+  if (NLIN.d_complex == nullptr)
+    { printf("copy_NLIN2host: something is wrong \n");
+      clean_exit_host("FFT1DArray NLIN not allocated", 1);
+    }
+  compute_nlin(d_psi);
+  copy_FFTArray_host_complex(h_nlin, NLIN);
 }
 // ------------------------------------------------------
 // Compute RHS 
 // ------------------------------------------------------
-void compute_rhs(const double* d_vv, const double* d_psik, double* RHS,
+void compute_rhs(double* d_vv, double* d_psik, double* RHS,
 		 double tt, double dt, int N,
-		 int stage);
+		 int stage)
 {
   FFTArray1D Fvv;
   FFTArray1D Fpsik;
@@ -305,15 +347,4 @@ void compute_rhs(const double* d_vv, const double* d_psik, double* RHS,
   double2FFTArray(Fpsik, d_psik, N);
   double2FFTArray(Frhs, RHS, N);
   compute_rhsv(Fpsik, Frhs, tt, dt); 
-
-
-  double2FFTArray(rhs, RHS, N);
-  psik_to_vv(psik, tt); 
-
-
-
-    cufftDoubleComplex m_EpsII = make_cuDoubleComplex(0.0, -Epsilon); //
-                                                    // -Epsilon*II
-  complex_mult_FFTArray(GradBetaPsik, m_EpsII); 
-  copy_FFTArray(GradBetaPsik, NLIN); //
 }

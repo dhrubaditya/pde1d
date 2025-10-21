@@ -9,7 +9,7 @@ NVCCFLAGS  := -O3
 # Output binary name
 TARGET     := mtest 
 # Source and object files
-SRC        := test_MMT.cu misc.cu MMT.cu fft_utils.cu 
+SRC        := fft_utils.cu misc.cu MMT.cu test_MMT.cu 
 OBJ        := $(SRC:.cu=.o)
 
 # Header dependency

@@ -215,10 +215,17 @@ __global__ void mult_Astar_B(cufftDoubleComplex* A,
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < nfreqs) {
       cufftDoubleComplex C ;
-      C.x = A[i].x * B[i].x + A[i].y * B[i].y ;
-      C.y = A[i].x * B[i].y - A[i].y * B[i].x ;
-      B[i].x = C.x; // stored in B
-      B[i].y = C.y;
+      C.x = A[i].x;
+      C.y = -A[i].y;
+      B[i] = cuCmul(C,B[i]);
+      /*double x = A[i].x;
+      double y = A[i].y;
+      double p = B[i].x;
+      double q = B[i].y;
+      C.x = x*p + q*y ;
+      C.y = x*q - y*p ;
+      B[i].x = C.x; 
+      B[i].y = C.y; */
     }
 }
 //---------------------------------------------------------//

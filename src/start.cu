@@ -9,7 +9,6 @@
 #include "fft_utils.h"
 #include "initcond.h"
 #include "misc.h"
-
 #define CUDA_CHECK(call)                                                    \
     do {                                                                    \
         cudaError_t err = (call);                                           \
@@ -45,7 +44,7 @@ int main() {
     cufftDoubleReal *Ek;
     CUDA_CHECK(cudaMallocHost((void**)&Ek,
     			      sizeof(double) * (N/2 + 1) ));
-    // guest memory
+    // device memory
     FFTArray1D d_psi = fft_alloc_1d(N);
     FFTPlan1D plan = fft_plan_create_1d(N);
     double* d_Ek;
@@ -80,7 +79,12 @@ int main() {
     write_spectrum(Ek, N, dk, 0);
     std::cout << "..done" << std::endl;
 // endsection
-
+//    std::cout << "Setup models .." << std::endl;
+//    setup_model(N); 
+//    std::cout << "Testing conservation of NN .." << std::endl;
+//    cufftDoubleComplex RHSN = test_NN_conservation(d_psi);
+//    std::cout << "RHS is .." << std::endl;
+//    std::cout << RHSN.x << " " << RHSN.y << std::endl;
 // section : clean up 
     cudaFreeHost(psi); cudaFreeHost(psik); cudaFreeHost(Ek);
     fft_plan_destroy_1d(plan);

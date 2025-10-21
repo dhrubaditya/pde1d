@@ -16,7 +16,7 @@ k = data[:, 0]
 spectrum = data[:, 1]
 
 plt.figure(figsize=(6,4))
-plt.plot(k, spectrum, '.-',label=f'Spectrum Q={Q}')
+plt.loglog(k, spectrum, '.-',label=f'Spectrum Q={Q}')
 plt.xlabel('k')
 plt.ylabel('Spectrum(k)')
 plt.title(f'Spectrum Plot (spec{Q}.dat)')

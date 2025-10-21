@@ -29,7 +29,7 @@ void set_initcond_fourier(FFTArray1D& d_psi, double dk, IParams& IC){
     set_peak_spectrum(d_psi,
 		      IC.A, dk,
 		      IC.kpeak,
-		      seed);
+		      seed, 1);
   }
   else if (IC.ITYPE == "zero") {
     set_zero(d_psi);
