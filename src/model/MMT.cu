@@ -151,25 +151,29 @@ void add_lin(FFTArray1D& Y, FFTArray1D& RHS){
 // ------------------------------------------------------
 // Hamiltonian
 // ------------------------------------------------------
-__global__ void compute_Hr_kernel(double* DelAlphaby2psi, double* DelBetaby4psi,
+__global__ void compute_Hr_kernel(double* DelAlphaby2psi, double* psi4,
 				  double* d_Hamil, int N){
   int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i > N) return;
   double Omega0 = d_MP.Omega0;
   double Epsilon = d_MP.Epsilon;
   double term1 = DelAlphaby2psi[i];
-  double term2 = DelBetaby4psi[i] ;
+  double term2 = psi4[i] ;
   d_Hamil[i] = Omega0 * term1  * term1 +
     (1./2.) * Epsilon * term2 * term2 * term2 * term2;
 
 }
 //
-void compute_Hr(FFTArray1D& GradAlphaby2psi, FFTArray1D& GradBetaby4psi){
-  int N = GradAlphaby2psi.N;
-  int block = 256;
-  int grid = (N + block - 1) / block;
-  compute_Hr_kernel<<<grid, block>>>(GradAlphaby2psi.d_real,
-				     GradBetaby4psi.d_real, d_Hr, N); 
+void compute_Hr(FFTArray1D& GradAlphaby2psi, FFTArray1D& psi4){
+  if(!GradAlphaby2psi.IsFourier && !psi4.IsFourier){
+    int N = GradAlphaby2psi.N;
+    int block = 256;
+    int grid = (N + block - 1) / block;
+    compute_Hr_kernel<<<grid, block>>>(GradAlphaby2psi.d_real,
+				     psi4.d_real, d_Hr, N);
+  }else{
+    clean_exit_host("compute_Hr: should be in real space", 1);
+  } 
 }
 //
 double Hamiltonian(FFTPlan1D& plan, FFTArray1D& psik){
@@ -278,7 +282,6 @@ void compute_nlin(const FFTArray1D& psik){
   copy_FFTArray(psik, NLIN); // NLIN = psi(k)
   double beta = h_MP.beta;
   double Epsilon = h_MP.Epsilon;
-  std::cout << beta << "\n";
   derivk(NLIN, -beta/4,  true); //k^{-\beta/4}psi
   fft_inverse_inplace(plan, NLIN);
   normalize_fft(NLIN); //F^{-1}(k^{-\beta/4}psi)
@@ -324,7 +327,8 @@ cufftDoubleComplex test_NN_conservation(FFTArray1D& psik){
   cufftDoubleComplex Z = compute_NN_nlin(psik);
   return Z;
 }
-void copy_NLIN2host(cufftDoubleComplex* h_nlin, const FFTArray1D& d_psi)
+void copy_NLIN2host(cufftDoubleComplex* h_nlin, double* h_nlink, 
+		    const FFTArray1D& d_psi)
 {
   if (NLIN.d_complex == nullptr)
     { printf("copy_NLIN2host: something is wrong \n");
@@ -332,6 +336,14 @@ void copy_NLIN2host(cufftDoubleComplex* h_nlin, const FFTArray1D& d_psi)
     }
   compute_nlin(d_psi);
   copy_FFTArray_host_complex(h_nlin, NLIN);
+  int N = d_psi.N;
+  double* d_nlink;
+  CUDA_CHECK(cudaMalloc(&d_nlink, sizeof(double) * (N/2 + 1)) );
+  compute_spectrum(NLIN, d_nlink);
+  normalize_spectrum(d_nlink, N);
+  CUDA_CHECK(cudaMemcpy(h_nlink, d_nlink, sizeof(double) * (N/2 + 1),
+                          cudaMemcpyDeviceToHost));
+  cudaFree(d_nlink);
 }
 // ------------------------------------------------------
 // Compute RHS 

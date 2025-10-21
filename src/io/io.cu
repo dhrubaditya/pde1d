@@ -162,12 +162,10 @@ void write_complex_array(cufftDoubleComplex* psik,
     }
 
     fcomplex << std::scientific << std::setprecision(8);
-    std::cout << "still ok \n";
     for (int i = 0; i < N/2 + 1; i++) {
         double k = i * dk;
         double re = psik[i].x;
         double im = psik[i].y;
-	std::cout << i << " " << re << " " << im << "\n";
         fcomplex << k << " " << re << " " << im << "\n";
     }
     fcomplex.close();

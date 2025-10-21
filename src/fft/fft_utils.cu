@@ -275,8 +275,8 @@ __global__ void peak_spectrum_kernel(cufftDoubleComplex* data,
   // Amplitude such that |F(k)|^2 = A k^xi
    if (sharp){
      if(i == kf){
-        re = 0 ;
-	im = A ;
+        re = A / sqrt(2.) ;
+	im = A / sqrt(2.) ;
         data[i].x = re;
         data[i].y = im;	
      }

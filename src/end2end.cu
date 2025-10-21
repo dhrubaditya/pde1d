@@ -75,16 +75,22 @@ int main() {
 // endsection
     std::cout << "Setup models .." << std::endl;
     setup_model(N);
-    //cufftDoubleComplex test = test_NN_conservation(d_psi);
-    //std::cout << test.x << " " <<test.y << "\n";
-    std::cout << "Testing calcn of nlin .." << std::endl;
+    std::cout << "Testing NN conservation ..\n" ;
+    cufftDoubleComplex test = test_NN_conservation(d_psi);
+    std::cout << test.x << " " <<test.y << "\n";
+    std::cout << "..done \n" ;
+     std::cout << "Testing calcn of nlin .." << std::endl;
     cufftDoubleComplex* h_nlin; 
     CUDA_CHECK(cudaMallocHost(&h_nlin, sizeof(cufftDoubleComplex) * (N/2 + 1)) );
-    copy_NLIN2host(h_nlin, d_psi);
+    double* Ek_nlin;
+    CUDA_CHECK(cudaMallocHost(&Ek_nlin, sizeof(double) * (N/2 + 1)) );
+    copy_NLIN2host(h_nlin, Ek_nlin, d_psi);
     std::cout << "writing data .." << std::endl;
     write_complex_array(h_nlin, dk, N, "nlin.out");
+    write_spectrum(Ek_nlin, N, dk, 1); 
+    cudaFreeHost(Ek_nlin); cudaFreeHost(h_nlin);
     // section : clean up 
-    cudaFreeHost(psi); cudaFreeHost(psik); cudaFreeHost(Ek);
+    cudaFreeHost(psi); cudaFreeHost(psik); cudaFreeHost(Ek); 
     fft_plan_destroy_1d(plan);
     fft_free_1d(d_psi);
     cudaFree(d_Ek);
