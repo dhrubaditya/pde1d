@@ -35,20 +35,20 @@ int main() {
     double dx = h_Sparams.DX;
 
     // --- Host memory  ---
-    cufftDoubleReal *psi, *psik;
+    cufftDoubleComplex *psi, *psik;
     CUDA_CHECK(cudaMallocHost((void**)&psi,
-			      sizeof(cufftDoubleReal) * (N + 2) ));
+			      sizeof(cufftDoubleComplex) * N  ));
     CUDA_CHECK(cudaMallocHost((void**)&psik,
-                               sizeof(cufftDoubleReal) * (N + 2) ));
+                               sizeof(cufftDoubleComplex) * N  ));
     // N+2 because fft needs extra storage.
     cufftDoubleReal *Ek;
     CUDA_CHECK(cudaMallocHost((void**)&Ek,
-    			      sizeof(double) * (N/2 + 1) ));
+    			      sizeof(double) * N ));
     // device memory
     FFTArray1D d_psi = fft_alloc_1d(N);
     FFTPlan1D plan = fft_plan_create_1d(N);
     double* d_Ek;
-    CUDA_CHECK(cudaMalloc(&d_Ek, sizeof(double) * (N/2 + 1)) );
+    CUDA_CHECK(cudaMalloc(&d_Ek, sizeof(double) * N ) );
 
     std::cout << "Reading initial condition input/icond.in .." << std::endl;
     const IParams h_Iparams = read_icond("./input/icond.in");
@@ -56,21 +56,19 @@ int main() {
     std::cout << "Generating initial condition (in device) .." << std::endl;
     if (h_Iparams.FOURIER){
       set_initcond(d_psi, dk, dx, h_Iparams);
-      compute_spectrum(d_psi, d_Ek);
-      normalize_spectrum(d_Ek, N);
-      copy_FFTArray_host(psik, d_psi);
+      compute_normalized_spectrum(d_psi, d_Ek);
+      copy_FFTArray_host_complex(psik, d_psi);
       fft_inverse_inplace(plan, d_psi);
       normalize_fft(d_psi);
-      copy_FFTArray_host(psi, d_psi);
+      copy_FFTArray_host_complex(psi, d_psi);
     }else{
       set_initcond(d_psi, dk, dx, h_Iparams);
-      copy_FFTArray_host(psi, d_psi);
+      copy_FFTArray_host_complex(psi, d_psi);
       fft_forward_inplace(plan, d_psi);
-      compute_spectrum(d_psi, d_Ek);
-      normalize_spectrum(d_Ek, N);
-      copy_FFTArray_host(psik, d_psi);
+      compute_normalized_spectrum(d_psi, d_Ek);
+      copy_FFTArray_host_complex(psik, d_psi);
     }
-    CUDA_CHECK(cudaMemcpy(Ek, d_Ek, sizeof(double) * (N/2 + 1),
+    CUDA_CHECK(cudaMemcpy(Ek, d_Ek, sizeof(double) * N,
 			  cudaMemcpyDeviceToHost));
     std::cout << "Writing intial condition to files .." << std::endl;
     write_initcond(psi, psik, dx, dk, N);

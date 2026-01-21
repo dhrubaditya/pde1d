@@ -4,7 +4,7 @@
 
 # CUDA compiler and host compiler
 NVCC      := nvcc
-CXX       := /usr/bin/g++-9
+CXX       := g++ 
 
 # Compilation and linking flags
 NVCCFLAGS := -ccbin=$(CXX) -O3 -dc

@@ -48,7 +48,7 @@ void set_initcond_real(FFTArray1D& d_psi, double dx, IParams& IC){
     std::cout << "Implementing sine in real space:" << std::endl;
     std::cout << "at kpeak = " << IC.kpeak << std::endl;
     std::cout << "amplitude = " << IC.A << std::endl;
-    set_sine_real(d_psi.d_real, dx,  
+    exp_ix(d_psi.d_complex, dx,  
 		  IC.A, IC.kpeak, d_psi.N);
     }
   else if (IC.ITYPE == "zero") {

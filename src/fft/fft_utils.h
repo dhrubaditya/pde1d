@@ -6,9 +6,7 @@
 // Structure for data buffers (no plans)
 struct FFTArray1D {
     int N;                          // number of real samples
-    double* d_real = nullptr;       // pointer to real data (N doubles)
     cufftDoubleComplex* d_complex = nullptr;// pointer to complex data
-                                            //(N/2 + 1 complex numbers)
     bool IsFourier = true;
 };
 
@@ -29,8 +27,8 @@ struct FFTPlan1D {
 inline FFTPlan1D fft_plan_create_1d(int N) {
     FFTPlan1D p;
     p.N = N;
-    cufftPlan1d(&p.plan_fwd, N, CUFFT_D2Z, 1);
-    cufftPlan1d(&p.plan_inv, N, CUFFT_Z2D, 1);
+    cufftPlan1d(&p.plan_fwd, N, CUFFT_Z2Z, 1);
+    cufftPlan1d(&p.plan_inv, N, CUFFT_Z2Z, 1);
     return p;
 }
 
@@ -50,7 +48,7 @@ void normalize_fft(FFTArray1D& arr);
 
 // Compute the power spectrum |F(k)|^2 of a real-to-complex FFT array
 // d_spectrum should be a device pointer of size N/2 + 1
-void compute_spectrum(const FFTArray1D& arr, double* d_spectrum);
+void compute_normalized_spectrum(const FFTArray1D& arr, double* d_spectrum);
 // Optional: normalize a spectrum array (|F(k)|^2)
 void normalize_spectrum(double* d_spectrum, int N);
 //-----------------
@@ -63,13 +61,19 @@ void set_peak_spectrum(FFTArray1D& arr,
                                  int kf,
                                  unsigned long seed,
 	                         bool sharp);
+void test_fft_freq(int N);
 void set_zero(FFTArray1D& arr);
 void derivk(FFTArray1D& arr, double hh,  bool abs);
 void copy_FFTArray(const FFTArray1D& A, FFTArray1D& B);
-void cube_FFTArray(FFTArray1D& A);
-void copy_FFTArray_host(double* h_A, FFTArray1D& A);
+//void copy_FFTArray_host(double* h_A, FFTArray1D& A);
+void copy_FFTArray_host_complex(cufftDoubleComplex* h_arr, FFTArray1D& arr);
 void set_sine_real(double* d_data, double dx, double A, int kpeak, int N);
 void set_cosine_real(double* d_data, double dx, double A, int kpeak, int N);
+void exp_ix(cufftDoubleComplex* data,
+                 double dx, double A, int kpeak, int N);
 void complex_mult_FFTArray(FFTArray1D& arr, cufftDoubleComplex z);
-void  double2FFTArray(FFTArray1D& Arr, double* yy, int N);
-void copy_FFTArray_host_complex(cufftDoubleComplex* h_arr, FFTArray1D& arr);
+//void double2FFTArray(FFTArray1D& Arr, double* yy, int N);
+void complex2FFTArray(FFTArray1D& Arr, 
+		     cufftDoubleComplex* yy, int N, bool is_fourier);
+void abs2_times_z_FFTArray(FFTArray1D& A);
+__device__ __host__ int fft_freq(int i, int N);

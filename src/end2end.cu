@@ -36,21 +36,21 @@ int main() {
     double dx = h_Sparams.DX;
 
     // --- Host memory  ---
-    cufftDoubleReal *psi;
+    cufftDoubleComplex *psi;
     cufftDoubleComplex *psik;
     CUDA_CHECK(cudaMallocHost((void**)&psi,
-			      sizeof(cufftDoubleReal) * (N + 2) ));
+			      sizeof(cufftDoubleComplex) * N  ));
     CUDA_CHECK(cudaMallocHost((void**)&psik,
-                               sizeof(cufftDoubleComplex) * (N/2 + 1) ));
+                               sizeof(cufftDoubleComplex) * N ));
     // N+2 because fft needs extra storage.
     cufftDoubleReal *Ek;
     CUDA_CHECK(cudaMallocHost((void**)&Ek,
-    			      sizeof(double) * (N/2 + 1) ));
+    			      sizeof(double) * N ));
     // device memory
     FFTArray1D d_psi = fft_alloc_1d(N);
     FFTPlan1D plan = fft_plan_create_1d(N);
     double* d_Ek;
-    CUDA_CHECK(cudaMalloc(&d_Ek, sizeof(double) * (N/2 + 1)) );
+    CUDA_CHECK(cudaMalloc(&d_Ek, sizeof(double) * N) );
 
     std::cout << "Reading initial condition input/icond.in .." << std::endl;
     const IParams h_Iparams = read_icond("./input/icond.in");
@@ -58,13 +58,12 @@ int main() {
     std::cout << "Generating initial condition (in device) .." << std::endl;
     if (h_Iparams.FOURIER){
       set_initcond(d_psi, dk, dx, h_Iparams);
-      compute_spectrum(d_psi, d_Ek);
-      normalize_spectrum(d_Ek, N);
+      compute_normalized_spectrum(d_psi, d_Ek);
       copy_FFTArray_host_complex(psik, d_psi);
     }else{
       clean_exit_host("e2e: checking nlin works with FOURIER icond", 0);
     }
-    CUDA_CHECK(cudaMemcpy(Ek, d_Ek, sizeof(double) * (N/2 + 1),
+    CUDA_CHECK(cudaMemcpy(Ek, d_Ek, sizeof(double) * N,
 			  cudaMemcpyDeviceToHost));
     std::cout << "Writing intial condition to files .." << std::endl;
     write_complex_array(psik, dk, N, "inicond.out");
@@ -79,16 +78,16 @@ int main() {
     cufftDoubleComplex test = test_NN_conservation(d_psi);
     std::cout << test.x << " " <<test.y << "\n";
     std::cout << "..done \n" ;
-     std::cout << "Testing calcn of nlin .." << std::endl;
+    /* std::cout << "Testing calcn of nlin .." << std::endl;
     cufftDoubleComplex* h_nlin; 
-    CUDA_CHECK(cudaMallocHost(&h_nlin, sizeof(cufftDoubleComplex) * (N/2 + 1)) );
+    CUDA_CHECK(cudaMallocHost(&h_nlin, sizeof(cufftDoubleComplex) * N ) );
     double* Ek_nlin;
-    CUDA_CHECK(cudaMallocHost(&Ek_nlin, sizeof(double) * (N/2 + 1)) );
+    CUDA_CHECK(cudaMallocHost(&Ek_nlin, sizeof(double) * N ) );
     copy_NLIN2host(h_nlin, Ek_nlin, d_psi);
     std::cout << "writing data .." << std::endl;
     write_complex_array(h_nlin, dk, N, "nlin.out");
     write_spectrum(Ek_nlin, N, dk, 1); 
-    cudaFreeHost(Ek_nlin); cudaFreeHost(h_nlin);
+    cudaFreeHost(Ek_nlin); cudaFreeHost(h_nlin);*/
     // section : clean up 
     cudaFreeHost(psi); cudaFreeHost(psik); cudaFreeHost(Ek); 
     fft_plan_destroy_1d(plan);

@@ -162,8 +162,9 @@ void write_complex_array(cufftDoubleComplex* psik,
     }
 
     fcomplex << std::scientific << std::setprecision(8);
-    for (int i = 0; i < N/2 + 1; i++) {
-        double k = i * dk;
+    for (int i = 0; i < N; i++) {
+	int ik = fft_freq(i, N);
+        double k = ik * dk;
         double re = psik[i].x;
         double im = psik[i].y;
         fcomplex << k << " " << re << " " << im << "\n";
@@ -171,8 +172,9 @@ void write_complex_array(cufftDoubleComplex* psik,
     fcomplex.close();
 }
 //----------------------------
-void write_initcond(const double* psi, const double* psik, double dx,
-		    double dk, int N)
+void write_initcond(const cufftDoubleComplex* psi, 
+		    const cufftDoubleComplex* psik, 
+		    double dx, double dk, int N)
 {
     // --- Ensure "data" directory exists ---
     mkdir("data", 0755);
@@ -187,7 +189,7 @@ void write_initcond(const double* psi, const double* psik, double dx,
     out_real << std::scientific << std::setprecision(8);
     for (int i = 0; i < N; i++) {
         double x = i * dx;
-        out_real << x << " " << psi[i] << "\n";
+        out_real << x << " " << psi[i].x << " " <<psi[i].y << "\n";
     }
     out_real.close();
 
@@ -201,8 +203,9 @@ void write_initcond(const double* psi, const double* psik, double dx,
     out_four << std::scientific << std::setprecision(8);
     const cufftDoubleComplex* psik_c = reinterpret_cast<const cufftDoubleComplex*>(psik);
 
-    for (int i = 0; i < N/2 + 1; i++) {
-        double k = i * dk;
+    for (int i = 0; i < N; i++) {
+	int ik = fft_freq(i, N);
+        double k = ik * dk;
         double re = psik_c[i].x;
         double im = psik_c[i].y;
         out_four << k << " " << re << " " << im << "\n";

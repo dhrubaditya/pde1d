@@ -13,9 +13,14 @@
         }                                                                   \
     } while (0)
 
-int main() {
-    int N = 1024;              // number of real samples
+int main(int argc, char* argv[]){
+    int N = 128;              // number of real samples
+    int kf = 4;
     double L = 2 * M_PI;       // domain size
+    N = std::atoi(argv[1]);
+    kf = std::atoi(argv[2]);
+    printf("Grid size N = %d\n", N);
+    printf("kf  = %d\n", kf);    
     // ----------------------------
     // Allocate FFT array and plan
     // ----------------------------
@@ -26,7 +31,6 @@ int main() {
 		 (double)total_mem/1000000.0);
     FFTArray1D arr = fft_alloc_1d(N);
     FFTPlan1D plan = fft_plan_create_1d(N);
-
     // ----------------------------
     // Initialize array as a power law spectrum 
     // ----------------------------
@@ -36,29 +40,28 @@ int main() {
     double kmax= 32;
     double dk = 1.;
     unsigned long long seed = static_cast<unsigned long long>(time(nullptr));
-//    set_power_law_spectrum(arr, A, xi, kmin, kmax, seed);
-    int kf = 8;
-    set_peak_spectrum(arr, A, dk, kf, seed);
+    set_power_law_spectrum(arr, A, xi, kmin, kmax, seed);
+    //set_peak_spectrum(arr, A, dk, kf, seed, true);
     // ----------------------------
     // Allocate spectrum array on device
     // ----------------------------
     double* d_spectrum;
-    CUDA_CHECK(cudaMalloc(&d_spectrum, sizeof(double) * (N/2 + 1)));
+    CUDA_CHECK(cudaMalloc(&d_spectrum, sizeof(double) * N ));
 
     // Compute spectrum |F(k)|^2
-    compute_spectrum(arr, d_spectrum);
+    compute_normalized_spectrum(arr, d_spectrum);
 
     // ----------------------------
     // Copy spectrum back to host
     // ----------------------------
-    double* h_spectrum = new double[N/2 + 1];
-    cudaMemcpy(h_spectrum, d_spectrum, sizeof(double) * (N/2 + 1), cudaMemcpyDeviceToHost);
+    double* h_spectrum = new double[N ];
+    cudaMemcpy(h_spectrum, d_spectrum, sizeof(double) * N, cudaMemcpyDeviceToHost);
 
     // ----------------------------
     // Write spectrum to file
     // ----------------------------
     std::ofstream fout("spectrum.txt");
-    for (int k = 0; k <= N/2; ++k) {
+    for (int k = 0; k < N; ++k) {
         fout << k << " " << h_spectrum[k] << "\n";
     }
     fout.close();

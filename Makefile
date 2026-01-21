@@ -3,7 +3,7 @@
 # ================================
 
 # Compiler and flags
-NVCC       := nvcc -ccbin=/usr/bin/g++-9
+NVCC       := nvcc -ccbin=g++
 NVCCFLAGS  := -O3  
 
 # Output binary name

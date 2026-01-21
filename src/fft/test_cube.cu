@@ -6,12 +6,14 @@
 #include <cuda_runtime.h>
 
 // Kernel to initialize real-space array: f(x) = sin(5x)
-__global__ void init_sin_kernel(double* data, int N, double L, double kf) {
+__global__ void eix_kernel(cufftDoubleComplex* data, 
+		         int N, double L, double kf) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < N) {
         double dx = L / N;
         double x = i * dx;
-        data[i] = sin(x * (double) kf);
+        data[i].x = cos(x * (double) kf);
+        data[i].y = sin(x * (double) kf);
     }
 }
 int main(int argc, char* argv[]){
@@ -34,12 +36,13 @@ int main(int argc, char* argv[]){
     arr.IsFourier = false;
     int block = 256;
     int grid = (N + block - 1) / block;
-    init_sin_kernel<<<grid, block>>>(arr.d_real, N, L, kf);
+    eix_kernel<<<grid, block>>>(arr.d_complex, N, L, kf);
     cudaDeviceSynchronize();
     // copy to host
-    double* f = new double[N + 2];
-    cudaMemcpy(f, arr.d_real, sizeof(double) * (N + 2), cudaMemcpyDeviceToHost);
-    cube_FFTArray(arr); // this is sin^3 now
+    cufftDoubleComplex* f = new cufftDoubleComplex[N ];
+    cudaMemcpy(f, arr.d_complex, sizeof(cufftDoubleComplex) * N , 
+		      cudaMemcpyDeviceToHost);
+    abs_times_z_FFTArray(arr);
     // ----------------------------
     // Forward FFT (real -> complex)
     // ----------------------------
@@ -49,14 +52,17 @@ int main(int argc, char* argv[]){
     fft_inverse_inplace(plan, arr);
     normalize_fft(arr);
     // copy back to host
-    double* df = new double[N + 2];
-    cudaMemcpy(df, arr.d_real, sizeof(double) * (N + 2), cudaMemcpyDeviceToHost);
-    // ----------------------------
+    cufftDoubleComplex* df = new cufftDoubleComplex[N ];
+    cudaMemcpy(df, arr.d_complex, sizeof(cufftDoubleComplex) * N , 
+		     cudaMemcpyDeviceToHost);
+
+        // ----------------------------
     // Write to file
     // ----------------------------
     std::ofstream fout("data.txt");
     for (int k = 0; k < N; ++k) {
-      fout << k << " " << f[k] << " " << df[k] << "\n";
+      fout << k << " " << f[k].x << " " <<f[k].y << " "
+           << df[k].x << " " << df[k].y << "\n";
     }
     fout.close();
     delete[] f;
@@ -68,6 +74,6 @@ int main(int argc, char* argv[]){
     fft_free_1d(arr);
     fft_plan_destroy_1d(plan);
 
-    std::cout << "func and its deriv in data.txt\n";
+    std::cout << "psi and |psi^2|psi \n";
     return 0;
 }

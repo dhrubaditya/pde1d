@@ -68,7 +68,7 @@ void init_Complex_reducer(GpuComplexReducer &ws, int maxN)
 {
     ws.maxN = maxN;
     ws.threads = 256;
-    ws.maxBlocks = (maxN / 2 + 1 + ws.threads * 2 - 1) / (ws.threads * 2);
+    ws.maxBlocks = (maxN  + ws.threads * 2 - 1) / (ws.threads * 2);
     cudaMalloc(&ws.d_partial, ws.maxBlocks * sizeof(cufftDoubleComplex));
 }
 void free_Complex_reducer(GpuComplexReducer &ws)
@@ -110,9 +110,8 @@ cufftDoubleComplex gpu_Complex_sum(const cufftDoubleComplex *d_in,
                                        int N,
                                        GpuComplexReducer &ws)
 {
-    int nfreq = N / 2 + 1;
     int threads = ws.threads;
-    int blocks = (nfreq + threads * 2 - 1) / (threads * 2);
+    int blocks = (N + threads * 2 - 1) / (threads * 2);
     int smem = threads * sizeof(cufftDoubleComplex);
 
     const cufftDoubleComplex *input_ptr = d_in;
@@ -121,7 +120,7 @@ cufftDoubleComplex gpu_Complex_sum(const cufftDoubleComplex *d_in,
     // iterative reduction using preallocated buffer
     while (true) {
         reduceComplexKernel<<<blocks, threads, smem>>>(input_ptr,
-						       ws.d_partial, nfreq);
+						       ws.d_partial, N);
         cudaDeviceSynchronize();
 
         if (blocks == 1) {
@@ -131,8 +130,7 @@ cufftDoubleComplex gpu_Complex_sum(const cufftDoubleComplex *d_in,
             break;
         }
 
-        nfreq = blocks;
-        blocks = (nfreq + threads * 2 - 1) / (threads * 2);
+        blocks = (blocks + threads * 2 - 1) / (threads * 2);
         input_ptr = ws.d_partial;
     }
 
@@ -211,21 +209,12 @@ __host__ __device__  cufftDoubleComplex exp_cuComplex(cufftDoubleComplex G,
 __global__ void mult_Astar_B(cufftDoubleComplex* A,
 			  cufftDoubleComplex* B, int N){
   // B = A* B
-    int nfreqs = N / 2 + 1;
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < nfreqs) {
+    if (i < N) {
       cufftDoubleComplex C ;
       C.x = A[i].x;
       C.y = -A[i].y;
       B[i] = cuCmul(C,B[i]);
-      /*double x = A[i].x;
-      double y = A[i].y;
-      double p = B[i].x;
-      double q = B[i].y;
-      C.x = x*p + q*y ;
-      C.y = x*q - y*p ;
-      B[i].x = C.x; 
-      B[i].y = C.y; */
     }
 }
 //---------------------------------------------------------//

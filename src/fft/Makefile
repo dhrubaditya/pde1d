@@ -9,15 +9,16 @@ NVCCFLAGS  := -O3
 # Output binary name
 #TARGET     := fft_test
 #TARGET     := deriv 
-#TARGET      := spec
+TARGET      := spec
 #TARGET      := sine
-TARGET      := cube 
+#TARGET      := cube 
+#TARGET      := main 
 # Source and object files
-#SRC        := main.cu fft_utils.cu 
-SRC        := deriv_test.cu misc.cu fft_utils.cu 
-#SRC        := test_spec.cu misc.cu fft_utils.cu 
+#SRC        := misc.cu fft_utils.cu main.cu 
+#SRC        := deriv_test.cu misc.cu fft_utils.cu 
+SRC        := test_spec.cu misc.cu fft_utils.cu 
 #SRC        := test_sine.cu misc.cu fft_utils.cu 
-SRC        := test_cube.cu misc.cu fft_utils.cu 
+#SRC        := test_cube.cu misc.cu fft_utils.cu 
 OBJ        := $(SRC:.cu=.o)
 
 # Header dependency

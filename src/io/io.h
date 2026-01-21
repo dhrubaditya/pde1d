@@ -8,8 +8,8 @@
 SParams read_Sparams(const char* filename);
 RParams read_Rparams(const char* filename);
 IParams read_icond(const std::string& filename);
-void write_initcond(const double* psi,
-		    const double* psik,
+void write_initcond(const cufftDoubleComplex* psi,
+		    const cufftDoubleComplex* psik,
 		    double dx,
 		    double dk,
 		    int N);

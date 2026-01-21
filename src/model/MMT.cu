@@ -103,6 +103,7 @@ void model_free_device_memory()
   if(mem_allocated){
     fft_free_1d(NLIN);
     fft_free_1d(GradAlphaPsik);
+    cudaFree(d_Hr);
     mem_allocated = false;
   }else{
     clean_exit_host("model: cannot deallocate model dev mem.", 1);
@@ -129,11 +130,11 @@ __global__ void add_lin_kernel(cufftDoubleComplex* Y,
 			        cufftDoubleComplex* data, int N){
     // compute the linear part and add it to the second array
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int nfreqs = N / 2 + 1;
-    if (i >= nfreqs) return;
+    if (i >= N) return;
     if (i == 0) return;
    //
-   double kk = (double) i;
+   int ik = fft_freq(i, N); 
+   double kk = (double) abs(ik);
    cufftDoubleComplex G = Green(kk);
    cufftDoubleComplex GY = cuCmul(G, Y[i]);
    data[i].x = data[i].x + GY.x ;
@@ -142,25 +143,27 @@ __global__ void add_lin_kernel(cufftDoubleComplex* Y,
 //-----------------------
 void add_lin(FFTArray1D& Y, FFTArray1D& RHS){
   // compute the linear part and add it to the second array
-  int nfreqs = Y.N / 2 + 1;
   int block = 256;
-  int grid = (nfreqs + block - 1) / block;
+  int grid = (Y.N + block - 1) / block;
   add_lin_kernel<<<grid, block>>>(Y.d_complex, RHS.d_complex, Y.N); 
 }
 
 // ------------------------------------------------------
 // Hamiltonian
 // ------------------------------------------------------
-__global__ void compute_Hr_kernel(double* DelAlphaby2psi, double* psi4,
+__global__ void compute_Hr_kernel(cufftDoubleComplex* DelAlphaby2psi, 
+		                  cufftDoubleComplex* psi4,
 				  double* d_Hamil, int N){
   int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i > N) return;
   double Omega0 = d_MP.Omega0;
   double Epsilon = d_MP.Epsilon;
-  double term1 = DelAlphaby2psi[i];
-  double term2 = psi4[i] ;
-  d_Hamil[i] = Omega0 * term1  * term1 +
-    (1./2.) * Epsilon * term2 * term2 * term2 * term2;
+  double term1 = DelAlphaby2psi[i].x * DelAlphaby2psi[i].x  
+	       + DelAlphaby2psi[i].y * DelAlphaby2psi[i].y ;
+  double term2 = psi4[i].x * psi4[i].x
+              +  psi4[i].y * psi4[i].y ;
+  d_Hamil[i] = Omega0 * term1 +
+    (1./2.) * Epsilon * term2 * term2; 
 
 }
 //
@@ -169,8 +172,8 @@ void compute_Hr(FFTArray1D& GradAlphaby2psi, FFTArray1D& psi4){
     int N = GradAlphaby2psi.N;
     int block = 256;
     int grid = (N + block - 1) / block;
-    compute_Hr_kernel<<<grid, block>>>(GradAlphaby2psi.d_real,
-				     psi4.d_real, d_Hr, N);
+    compute_Hr_kernel<<<grid, block>>>(GradAlphaby2psi.d_complex,
+				     psi4.d_complex, d_Hr, N);
   }else{
     clean_exit_host("compute_Hr: should be in real space", 1);
   } 
@@ -181,14 +184,14 @@ double Hamiltonian(FFTPlan1D& plan, FFTArray1D& psik){
   double alpha = h_MP.alpha;
   double beta = h_MP.beta;
   copy_FFTArray(psik, NLIN); // psi(k)
-  derivk(NLIN, -beta/4,  true); //|del|^{-\beta/4}psi(k)
+  derivk(NLIN, -beta/4,  true); //|k|^{-\beta/4}psi(k)
   fft_inverse_inplace(plan, NLIN);
-  normalize_fft(NLIN); //|del|^{-\beta/4}psi(r)
+  normalize_fft(NLIN); //F^{-1}[|k|^{-\beta/4}psi]
   
   copy_FFTArray(psik, GradAlphaPsik); // psi(k)
-  derivk(GradAlphaPsik, alpha/2,  true); //|del|^{\alpha/2}psi(k)
+  derivk(GradAlphaPsik, alpha/2,  true); //|k|^{\alpha/2}psi(k)
   fft_inverse_inplace(plan, GradAlphaPsik);
-  normalize_fft(GradAlphaPsik); //|del|^{\alpha/2}psi(r)
+  normalize_fft(GradAlphaPsik); //F^{-1}[|k|^{\alpha/2}psi]
   compute_Hr(GradAlphaPsik, NLIN);
   double HH = gpu_sum(d_Hr, N, red);
   return HH;
@@ -198,17 +201,18 @@ __global__ void psik_to_vv__kernel(const cufftDoubleComplex* d_psik,
 			   cufftDoubleComplex* d_vv,
 			   double time, int N){
   int i = blockIdx.x * blockDim.x + threadIdx.x;
-  int nfreqs = N / 2 + 1;
-  if (i >= nfreqs) return;
+  if (i >= N) return;
   if (i == 0) return;
   //
   if (time == 0.){
-    d_vv[i] = d_psik[i];
+    d_vv[i].x = d_psik[i].x;
+    d_vv[i].y = d_psik[i].y;
   }else{
-  double kk = (double) i;
-  cufftDoubleComplex G = Green(kk);
-  cufftDoubleComplex emGt = exp_cuComplex(G, -time);
-  d_vv[i] = cuCmul(emGt, d_psik[i]);
+    int ik = fft_freq(i, N);
+    double kk = (double) abs(ik) ;
+    cufftDoubleComplex G = Green(kk);
+    cufftDoubleComplex emGt = exp_cuComplex(G, -time);
+    d_vv[i] = cuCmul(emGt, d_psik[i]);
   }
 }
 //
@@ -216,37 +220,41 @@ __global__ void vv_to_psik__kernel(const cufftDoubleComplex* d_vv,
 			   cufftDoubleComplex* d_psik,
 			   double time, int N){
   int i = blockIdx.x * blockDim.x + threadIdx.x;
-  int nfreqs = N / 2 + 1;
-  if (i >= nfreqs) return;
+  if (i >= N) return;
   if (i == 0) return;
   //
   if (time == 0.){
-     d_psik[i] = d_vv[i];
+     d_psik[i].x = d_vv[i].x;
+     d_psik[i].y = d_vv[i].y;
   }else{
-  double kk = (double) i;
-  cufftDoubleComplex G = Green(kk);
-  cufftDoubleComplex eGt = exp_cuComplex(G, time);
-  d_psik[i] = cuCmul(eGt, d_vv[i]);
+    int ifreq = fft_freq(i, N);
+    int ik = abs(ifreq);
+    double kk = (double) ik ;
+    cufftDoubleComplex G = Green(kk);
+    cufftDoubleComplex eGt = exp_cuComplex(G, time);
+    d_psik[i] = cuCmul(eGt, d_vv[i]);
   }
 }
-void exp_inv_transform(double* vv, double* psik, double time, int N ){
+void exp_inv_transform(cufftDoubleComplex* vv, 
+		      cufftDoubleComplex* psik, double time, int N )
+{
   FFTArray1D Fpsik;
   FFTArray1D Fvv;
-  double2FFTArray(Fpsik, psik, N);
-  double2FFTArray(Fvv, vv, N);
-  int nfreqs = N / 2 + 1;
+  complex2FFTArray(Fpsik, psik, N, true);
+  complex2FFTArray(Fvv, vv, N, true);
   int block = 256;
-  int grid = (nfreqs + block - 1) / block;
+  int grid = (N + block - 1) / block;
   vv_to_psik__kernel<<<grid, block>>>(Fvv.d_complex,
 				      Fpsik.d_complex,
 				      time, N);
 }
 //
-void exp_transform(double* psik, double* vv, double time, int N ){
+void exp_transform(cufftDoubleComplex* psik,
+		   cufftDoubleComplex* vv, double time, int N ){
   FFTArray1D Fpsik;
   FFTArray1D Fvv;
-  double2FFTArray(Fpsik, psik, N);
-  double2FFTArray(Fvv, vv, N);
+  complex2FFTArray(Fpsik, psik, N, true);
+  complex2FFTArray(Fvv, vv, N, true);
   int nfreqs = N / 2 + 1;
   int block = 256;
   int grid = (nfreqs + block - 1) / block;
@@ -274,22 +282,22 @@ __global__ void mult_prefactor_rhsv_kernel(cufftDoubleComplex* d_psi4,
     cufftDoubleComplex emGt = exp_cuComplex(G, -time);
     rhs = cuCmul(emGt,d_psi4[i]);
   }
-  vrhs[i].x =    dt * rhs.y / pow(kk, d_MP.beta)  ;
-  vrhs[i].y = -  dt * rhs.x / pow(kk, d_MP.beta);    
+  vrhs[i].x =    dt * rhs.y ;
+  vrhs[i].y = -  dt * rhs.x ;    
 }
 //---------------------
 void compute_nlin(const FFTArray1D& psik){
-  copy_FFTArray(psik, NLIN); // NLIN = psi(k)
+  copy_FFTArray(psik, NLIN); // NL = psi(k)
   double beta = h_MP.beta;
   double Epsilon = h_MP.Epsilon;
-  derivk(NLIN, -beta/4,  true); //k^{-\beta/4}psi
+  derivk(NLIN, -beta/4,  true); //NL = k^{-\beta/4}psi
   fft_inverse_inplace(plan, NLIN);
-  normalize_fft(NLIN); //F^{-1}(k^{-\beta/4}psi)
-  cube_FFTArray(NLIN); //( F^{-1}(k^{-\beta/4}psi) )^3 
+  normalize_fft(NLIN); //NL = F^{-1}(k^{-\beta/4}psi)
+  abs2_times_z_FFTArray(NLIN); //( |NL|^2 NL ) 
   fft_forward_inplace(plan, NLIN); //
-                          //F( (F^{-1}(|del|^{-\beta/4}psi) )^3 )
+                          //F( |NL|^2 NL )
   derivk(NLIN, -beta/4, true); //
-                          //(k^{-beta/4}F( (F^{-1}(|del|^{-\beta/4}psi) )^3 )
+                          //(k^{-beta/4}F( |NL|^2 NL )
 }
 //---------------------
 void compute_rhsv(const FFTArray1D& psik, FFTArray1D& rhs,
@@ -303,19 +311,25 @@ void compute_rhsv(const FFTArray1D& psik, FFTArray1D& rhs,
 				       rhs.d_complex, time, dt, N); 
 }
 //-------------------
-cufftDoubleComplex compute_NN_nlin(const FFTArray1D& psik){
-  int N = psik.N;
-  int nfreqs = N / 2 + 1;
-  int block = 256;
-  int grid = (nfreqs + block - 1) / block;
-  mult_Astar_B<<<grid, block>>>(psik.d_complex,
+cufftDoubleComplex sum_psi_star_nlin_psi(const FFTArray1D& psik)
+{
+  cufftDoubleComplex sum ;
+  if(!NLIN.IsFourier && !psik.IsFourier){
+    int N = psik.N;
+    int block = 256;
+    int grid = (N + block - 1) / block;
+    mult_Astar_B<<<grid, block>>>(psik.d_complex,
 				NLIN.d_complex, N);
-  GpuComplexReducer ws;
-  init_Complex_reducer(ws, N);
-  cufftDoubleComplex sum = gpu_Complex_sum(NLIN.d_complex,
+    GpuComplexReducer ws;
+    init_Complex_reducer(ws, N);
+    sum = gpu_Complex_sum(NLIN.d_complex,
 					       N, ws);
-  free_Complex_reducer(ws);
-  return sum;
+    free_Complex_reducer(ws);
+  }else{
+    sum.x = 0.; sum.y = 0.;   
+    clean_exit_host("sum_psi_star_nlin_psi: should be in real space", 1);
+  }
+    return sum;
 }
 //-----------------
 cufftDoubleComplex test_NN_conservation(FFTArray1D& psik){
@@ -324,9 +338,14 @@ cufftDoubleComplex test_NN_conservation(FFTArray1D& psik){
       clean_exit_host("FFT1DArray NLIN not allocated", 1);
     }
   compute_nlin(psik);
-  cufftDoubleComplex Z = compute_NN_nlin(psik);
+  fft_inverse_inplace(plan, NLIN);
+  normalize_fft(NLIN); 
+  fft_inverse_inplace(plan, psik);
+  normalize_fft(psik); 
+  cufftDoubleComplex Z = sum_psi_star_nlin_psi(psik);
   return Z;
 }
+//---------------------------
 void copy_NLIN2host(cufftDoubleComplex* h_nlin, double* h_nlink, 
 		    const FFTArray1D& d_psi)
 {
@@ -338,25 +357,26 @@ void copy_NLIN2host(cufftDoubleComplex* h_nlin, double* h_nlink,
   copy_FFTArray_host_complex(h_nlin, NLIN);
   int N = d_psi.N;
   double* d_nlink;
-  CUDA_CHECK(cudaMalloc(&d_nlink, sizeof(double) * (N/2 + 1)) );
-  compute_spectrum(NLIN, d_nlink);
-  normalize_spectrum(d_nlink, N);
-  CUDA_CHECK(cudaMemcpy(h_nlink, d_nlink, sizeof(double) * (N/2 + 1),
-                          cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMalloc(&d_nlink, sizeof(double) * N )  );
+  compute_normalized_spectrum(NLIN, d_nlink);
+  CUDA_CHECK(cudaMemcpy(h_nlink, d_nlink, sizeof(double) * N ,
+                        cudaMemcpyDeviceToHost) );
   cudaFree(d_nlink);
 }
 // ------------------------------------------------------
 // Compute RHS 
 // ------------------------------------------------------
-void compute_rhs(double* d_vv, double* d_psik, double* RHS,
-		 double tt, double dt, int N,
-		 int stage)
+void compute_rhs_model(cufftDoubleComplex* d_vv,
+		       cufftDoubleComplex* d_psik,
+		       cufftDoubleComplex* RHS,
+		       double tt, double dt, int N,
+		       int stage)
 {
   FFTArray1D Fvv;
   FFTArray1D Fpsik;
   FFTArray1D Frhs;
-  double2FFTArray(Fvv, d_vv, N);
-  double2FFTArray(Fpsik, d_psik, N);
-  double2FFTArray(Frhs, RHS, N);
+  complex2FFTArray(Fvv, d_vv, N, true);
+  complex2FFTArray(Fpsik, d_psik, N, true);
+  complex2FFTArray(Frhs, RHS, N, true);
   compute_rhsv(Fpsik, Frhs, tt, dt); 
 }

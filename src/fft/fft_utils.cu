@@ -12,39 +12,49 @@
         }                                                                   \
     } while (0)
 // ******************************************** //
-void  double2FFTArray(FFTArray1D& Arr, double* yy, int N){
-  Arr.N = N;
-  Arr.d_real = yy;
-  Arr.d_complex = reinterpret_cast<cufftDoubleComplex*>(Arr.d_real);
-}
 //--------------------
 FFTArray1D fft_alloc_1d(int N) {
     FFTArray1D arr;
     arr.N = N;
 
-    size_t bytes = sizeof(double) * (N + 2);
-    CUDA_CHECK(cudaMalloc(&arr.d_real, bytes));
-    arr.d_complex = reinterpret_cast<cufftDoubleComplex*>(arr.d_real);
+    size_t bytes = sizeof(cufftDoubleComplex) * N ;
+    CUDA_CHECK(cudaMalloc(&arr.d_complex, bytes));
 
     return arr;
 }
 //
 void fft_free_1d(FFTArray1D& arr) {
-  CUDA_CHECK(cudaFree(arr.d_real));
-  arr.d_real = nullptr;
+  CUDA_CHECK(cudaFree(arr.d_complex));
   arr.d_complex = nullptr;
 }
 //
 void copy_FFTArray_host_complex(cufftDoubleComplex* h_arr, FFTArray1D& arr){
   int N = arr.N;
-  CUDA_CHECK(cudaMemcpy(h_arr, arr.d_complex, 
-			  sizeof(cufftDoubleComplex) * (N/2 + 1),
-			cudaMemcpyDeviceToHost));
+  CUDA_CHECK( cudaMemcpy(h_arr, arr.d_complex, 
+			 sizeof(cufftDoubleComplex) * N,
+			 cudaMemcpyDeviceToHost) );
 }
-void copy_FFTArray_host(double* h_arr, FFTArray1D& arr){
-  int N = arr.N;
-  CUDA_CHECK(cudaMemcpy(h_arr, arr.d_real, sizeof(double) * (N + 2),
-			cudaMemcpyDeviceToHost));
+//
+__global__ void complex2fft_kernel(cufftDoubleComplex* A,
+			           cufftDoubleComplex* B,
+			           int N )
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < N  ) {
+	B[i].x = A[i].x ;
+	B[i].y = A[i].y ;
+    }
+}
+//-------------------------//
+void complex2FFTArray(FFTArray1D& Arr, 
+		      cufftDoubleComplex* yy, 
+		      int N, bool is_fourier)
+{
+  Arr.N = N;
+  Arr.IsFourier = is_fourier;
+  int block = 256;
+  int grid = (N + block - 1) / block;
+  complex2fft_kernel<<<grid, block>>>(Arr.d_complex, yy, N );
 }
 //
 __global__ void B_Adt_kernel(cufftDoubleComplex* A,
@@ -52,7 +62,7 @@ __global__ void B_Adt_kernel(cufftDoubleComplex* A,
 			     int N,
 			     double dt){
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < N + 2 ) {
+    if (i < N  ) {
 	B[i].x = A[i].x * dt;
 	B[i].y = A[i].y * dt;
     }
@@ -64,10 +74,12 @@ void B_Adt_FFTArray(FFTArray1D& A, FFTArray1D& B, double dt){
   B_Adt_kernel<<<grid, block>>>(A.d_complex, B.d_complex, A.N, dt);
   
 }
-__global__ void copy_array_kernel(double* A, double* B, int M){
+__global__ void copy_array_kernel(cufftDoubleComplex* A, 
+		                  cufftDoubleComplex* B, int N){
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < M ) {
-        B[i] = A[i]; 
+    if (i < N ) {
+        B[i].x = A[i].x; 
+        B[i].y = A[i].y ; 
     }
 }
 void copy_FFTArray(const FFTArray1D& A, FFTArray1D& B){
@@ -75,57 +87,67 @@ void copy_FFTArray(const FFTArray1D& A, FFTArray1D& B){
   B.IsFourier = A.IsFourier;
   int block = 256;
   int grid = (A.N + 2 + block - 1) / block;
-  copy_array_kernel<<<grid, block>>>(A.d_real, B.d_real, A.N + 2);
+  copy_array_kernel<<<grid, block>>>(A.d_complex, B.d_complex, A.N );
 }
 //
-__global__ void cube_array_kernel(double* A, int N){
+__global__ void abs2_times_z_kernel(cufftDoubleComplex* A, int N){
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < N ) {
-      double x = A[i];
-      A[i] = x * x * x; 
+      double re = A[i].x ;
+      double im = A[i].y ;
+      double Abs2 = re * re + im * im ;
+      A[i].x = Abs2 * A[i].x ; 
+      A[i].y = Abs2 * A[i].y ; 
     }
-    if (i == N || i == N + 1){A[i] = 0.;}
 }
 //
-void cube_FFTArray(FFTArray1D& A){
+void abs2_times_z_FFTArray(FFTArray1D& A){
   if(A.IsFourier){
-      clean_exit_host("cub_FFTArray only in real space", 0);
+      clean_exit_host("abs_time_z_FFTArray only in real space", 0);
   }else{
     int block = 256;
-    int grid = (A.N + 2 + block - 1) / block;
-    cube_array_kernel<<<grid, block>>>(A.d_real, A.N );
+    int grid = (A.N + block - 1) / block;
+    abs2_times_z_kernel<<<grid, block>>>(A.d_complex, A.N );
   }
 }
 //
-__global__ void quartic_array_kernel(double* A, int N){
+__global__ void quartic_array_kernel(cufftDoubleComplex* A, 
+		                     double* B, int N){
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < N ) {
-        A[i] = A[i]*A[i]*A[i]*A[i]; 
+      double re = A[i].x ;
+      double im = A[i].y ;
+      double Abs = sqrt( re * re + im * im );
+        B[i] = Abs * Abs; 
     }
 }
 //
-void quartic_FFTArray(FFTArray1D& A){
-  int block = 256;
-  int grid = (A.N + block - 1) / block;
-  quartic_array_kernel<<<grid, block>>>(A.d_real, A.N );
+void quartic_FFTArray(FFTArray1D& A, double* B){
+  if(A.IsFourier){
+      clean_exit_host("quartic_FFTArray only in real space", 0);
+  }else{
+    int block = 256;
+    int grid = (A.N + block - 1) / block;
+    quartic_array_kernel<<<grid, block>>>(A.d_complex, B, A.N );
+  }
 }
 // Forward FFT (real → complex)
 void fft_forward_inplace(const FFTPlan1D& plan, FFTArray1D& arr) {
     if (arr.IsFourier){
       clean_exit_host("fft_forward_inplace : wrong call", 0);
     }else{
-    cufftExecD2Z(plan.plan_fwd,
-                 reinterpret_cast<cufftDoubleReal*>(arr.d_real),
-                 reinterpret_cast<cufftDoubleComplex*>(arr.d_complex));
+    cufftExecZ2Z(plan.plan_fwd,
+                 arr.d_complex,
+                 arr.d_complex, CUFFT_FORWARD);
     arr.IsFourier = true;
     }
 }
 // Inverse FFT (complex → real)
 void fft_inverse_inplace(const FFTPlan1D& plan, FFTArray1D& arr) {
     if (arr.IsFourier){
-      cufftExecZ2D(plan.plan_inv,
-                 reinterpret_cast<cufftDoubleComplex*>(arr.d_complex),
-                 reinterpret_cast<cufftDoubleReal*>(arr.d_real));
+      cufftExecZ2Z(plan.plan_inv,
+                   arr.d_complex,
+                   arr.d_complex, CUFFT_INVERSE );
       arr.IsFourier = false;
     }else{
       clean_exit_host("fft_inverse_inplace : wrong call", 0);
@@ -133,67 +155,65 @@ void fft_inverse_inplace(const FFTPlan1D& plan, FFTArray1D& arr) {
 
 }
 //
-__global__ void normalize_fft_kernel(double* data, int N) {
+__global__ void normalize_fft_kernel(cufftDoubleComplex* data, int N) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < N) {
-        data[i] /= N;  // scale inverse FFT
-    }
-    if (i == N || i == N + 1){
-       data[i] = 0.; //make sure zero-padding.
+        data[i].x /= N;  // scale inverse FFT
+        data[i].y /= N;  // scale inverse FFT
     }
 }
 //
 void normalize_fft(FFTArray1D& arr) {
     if (arr.IsFourier){
-      clean_exit_host("normalize_fft works only for real array", 0);
+      clean_exit_host("normalize_fft works only in real space", 0);
     }else{
       int block = 256;
-      int grid = (arr.N + 2 + block - 1) / block;
-      normalize_fft_kernel<<<grid, block>>>(arr.d_real, arr.N);
+      int grid = (arr.N + block - 1) / block;
+      normalize_fft_kernel<<<grid, block>>>(arr.d_complex, arr.N);
       cudaDeviceSynchronize();
     }
 }
 
 //spectrum calculation 
-__global__ void compute_spectrum_kernel(const cufftDoubleComplex* data,
-                             double* spectrum,
-                             int nfreqs)
+__device__ __host__ int fft_freq(int i, int N)
 {
-     int i = blockIdx.x * blockDim.x + threadIdx.x;
-     if (i < nfreqs) {
-       double re = data[i].x;
-       double im = data[i].y;
-       spectrum[i] = re * re + im * im;  // |F(k)|²
+    return (i < N/2) ? i : i - N ;
+}
+void test_fft_freq(int N)
+{
+     for (int i = 0; i< N; i++){
+       int j = fft_freq(i, N);
+       std::cout << i << " " << j << " " << N <<"\n";
      }
 }
 //
-void compute_spectrum(const FFTArray1D& arr, double* d_spectrum)
+__global__ void normalized_spectrum_kernel(const cufftDoubleComplex* data,
+                             double* spectrum,
+                             int N)
+{
+     int i = blockIdx.x * blockDim.x + threadIdx.x;
+     if (i < N) {
+       double re = data[i].x;
+       double im = data[i].y;
+       int ifreq = fft_freq(i, N) ;
+       int ik = abs(ifreq);
+       spectrum[ik] = (re * re + im * im ) / (N * N) ;  // |F(k)|²
+     }
+}
+//
+void compute_normalized_spectrum(const FFTArray1D& arr, double* d_spectrum)
 {
     if(arr.IsFourier){
-      int nfreqs = arr.N / 2 + 1;
+      int N = arr.N ; 
       int block = 256;
-      int grid = (nfreqs + block - 1) / block;
-      compute_spectrum_kernel<<<grid, block>>>(arr.d_complex,
-					       d_spectrum, nfreqs);
+      int grid = (N + block - 1) / block;
+      normalized_spectrum_kernel<<<grid, block>>>(arr.d_complex,
+					       d_spectrum, N);
     }else{
       clean_exit_host("compute_spectrum works only in fourier space", 0);
     }
 }
 
-__global__ void normalize_spectrum_kernel(double* spectrum, int nfreqs, int N) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < nfreqs) {
-        spectrum[i] /= (N * N); // normalize |F(k)|^2
-    }
-}
-
-void normalize_spectrum(double* d_spectrum, int N) {
-    int nfreqs = N / 2 + 1;
-    int block = 256;
-    int grid = (nfreqs + block - 1) / block;
-    normalize_spectrum_kernel<<<grid, block>>>(d_spectrum, nfreqs, N);
-    cudaDeviceSynchronize();
-}
 // Generates data in fourier space with a given spectrum
 
 // Kernel to set power-law spectrum using Mersenne Twister RNG
@@ -206,13 +226,14 @@ __global__ void power_law_spectrum_kernel(cufftDoubleComplex* data,
                                              unsigned long seed)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int nfreqs = N / 2 + 1;
-    if (i >= nfreqs) return;
+    if (i >= N) return;
 
     double re = 0.0;
     double im = 0.0;
-
-    if (i >= kmin && i <= kmax) {
+    int ifreq = fft_freq(i, N) ;
+    int ik = abs(ifreq);
+    double kk = (double) ik;
+    if (ik >= kmin && ik <= kmax) {
         // 
 	curandStatePhilox4_32_10_t state;
         curand_init(seed + i, 0, 0, &state); 
@@ -221,14 +242,14 @@ __global__ void power_law_spectrum_kernel(cufftDoubleComplex* data,
         double phi = curand_uniform_double(&state) * 2.0 * M_PI;
 
         // Amplitude such that |F(k)|^2 = A k^xi
-        double amplitude = sqrt(A * pow((double)i, xi));
+        double amplitude = sqrt(A * pow(kk, xi));
         re = amplitude * cos(phi);
         im = amplitude * sin(phi);
     }
 
     data[i].x = re;
     data[i].y = im;
-    if ( i == 0 || i == N/2 ) {data[i].y = 0.;}
+    if ( i == 0 ) {data[i].x = 0.; data[i].y = 0.;}
 }
 //------------------------
 void set_power_law_spectrum(FFTArray1D& arr,
@@ -237,9 +258,9 @@ void set_power_law_spectrum(FFTArray1D& arr,
                                       unsigned long seed = 1234)
 {
     if (arr.IsFourier){
-      int nfreqs = arr.N / 2 + 1;
+      int N = arr.N ;
       int block = 256;
-      int grid = (nfreqs + block - 1) / block;
+      int grid = (N + block - 1) / block;
 
       power_law_spectrum_kernel<<<grid, block>>>(arr.d_complex,
                                                   arr.N,
@@ -259,9 +280,9 @@ __global__ void peak_spectrum_kernel(cufftDoubleComplex* data,
 				    bool sharp)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int nfreqs = N / 2 + 1;
-    if (i >= nfreqs) return;
-
+    if (i >= N) return;
+    int ifreq = fft_freq(i, N) ;
+    int ik = abs(ifreq);
     double re = 0.0;
     double im = 0.0;
 
@@ -274,7 +295,7 @@ __global__ void peak_spectrum_kernel(cufftDoubleComplex* data,
 
   // Amplitude such that |F(k)|^2 = A k^xi
    if (sharp){
-     if(i == kf){
+     if(ik == kf){
         re = A / sqrt(2.) ;
 	im = A / sqrt(2.) ;
         data[i].x = re;
@@ -282,8 +303,8 @@ __global__ void peak_spectrum_kernel(cufftDoubleComplex* data,
      }
    }else{
    double KF = (double) kf;
-   double kk = (double) i;
-   double amplitude = gaussian(kk, kf, 2*dk, A);
+   double KK = (double) ik;
+   double amplitude = gaussian(KK, KF, dk, A);
 
    re = amplitude * cos(phi);
    im = amplitude * sin(phi);
@@ -291,7 +312,10 @@ __global__ void peak_spectrum_kernel(cufftDoubleComplex* data,
     data[i].x = re;
     data[i].y = im;
    }
-   if ( i == 0 || i == N/2 ) {data[i].y = 0.;}
+   if ( i == 0 ) {
+     data[i].x = 0.;
+     data[i].y = 0.;
+   }
 }
 //--------------------------------
 void set_peak_spectrum(FFTArray1D& arr,
@@ -301,9 +325,8 @@ void set_peak_spectrum(FFTArray1D& arr,
 				 bool sharp = 0)
 { 
     if (arr.IsFourier){
-      int nfreqs = arr.N / 2 + 1;
       int block = 256;
-      int grid = (nfreqs + block - 1) / block;
+      int grid = (arr.N + block - 1) / block;
 
       peak_spectrum_kernel<<<grid, block>>>(arr.d_complex,
                                           arr.N,
@@ -314,46 +337,45 @@ void set_peak_spectrum(FFTArray1D& arr,
     }
 }
 // ---------------------
-__global__ void set_zero_kernel(double* data, int N){
+__global__ void set_zero_kernel(cufftDoubleComplex* data, int N){
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= N+2) return;
-    data[i] = 0.0;
+    if (i >= N) return;
+    data[i].x = 0.0;
+    data[i].y = 0.0;
 }
 //----------------------------------------
 void set_zero(FFTArray1D& arr){
     int N = arr.N;
     int block = 256;
-    int grid = (N + 2+ block - 1) / block; //+2 because the array is N+2
+    int grid = (N + block - 1) / block; 
 
-    set_zero_kernel<<<grid, block>>>(arr.d_real, arr.N);
+    set_zero_kernel<<<grid, block>>>(arr.d_complex, arr.N);
     cudaDeviceSynchronize();
 }
 //---------------
 __global__ void  complex_mult_kernel(cufftDoubleComplex* data,
 				     cufftDoubleComplex z, int N){
   int i = blockIdx.x * blockDim.x + threadIdx.x;
-  int nfreqs = N / 2 + 1;
-  if (i >= nfreqs) return;
+  if (i >= N) return;
   data[i] = cuCmul(data[i],z);  
 }
 //----------------------------
 void  complex_mult_FFTArray(FFTArray1D& arr, cufftDoubleComplex z){
-  int nfreqs = arr.N / 2 + 1;
   int block = 256;
-  int grid = (nfreqs + block - 1) / block;
+  int grid = (arr.N + block - 1) / block;
   complex_mult_kernel<<<grid, block>>>(arr.d_complex, z, arr.N);
 }
-//
+//------------------------------------//
 __global__ void derivk_kernel(cufftDoubleComplex* data, double hh, int N,
-			      bool abs){
+			      bool babs){
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int nfreqs = N / 2 + 1;
-    if (i >= nfreqs) return;
+    if (i >= N) return;
     if (i == 0) return;
 
    //
-   double kk = (double) i;
-   if (abs){
+   int ik = fft_freq(i, N);
+   double kk = (double) abs(ik) ;
+   if (babs){
      data[i].x = pow(kk,hh)*data[i].x ; 
      data[i].y = pow(kk,hh)*data[i].y ;
    }else{ 
@@ -369,45 +391,68 @@ __global__ void derivk_kernel(cufftDoubleComplex* data, double hh, int N,
    }
 }
 //----------------------------------------
-void derivk(FFTArray1D& arr, double hh,  bool abs){
+void derivk(FFTArray1D& arr, double hh,  bool babs){
 	// calculates hh order derivative of array ff in Fourier space 
 	// hh can be fractional including negative. The output is stored
-	// in ff itself. If abs is set then the absolute value of the 
+	// in ff itself. If babs is set then the absolute value of the 
        // derivative is calculated. 	
     if (arr.IsFourier){
-      int nfreqs = arr.N / 2 + 1;
       int block = 256;
-      int grid = (nfreqs + block - 1) / block;
-      derivk_kernel<<<grid, block>>>(arr.d_complex, hh, arr.N, abs);
+      int grid = (arr.N + block - 1) / block;
+      derivk_kernel<<<grid, block>>>(arr.d_complex, hh, arr.N, babs);
     }else{
       clean_exit_host("derivk works only in fourier space", 0);
     }
 }
 //
-__global__ void sine_kernel(double* data, double dx, double A, int kpeak, int N) {
+__global__ void sine_kernel(cufftDoubleComplex* data, 
+		 double dx, double A, int kpeak, int N) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < N) {
         double x = i * dx;
 	double KPEAK = (double) kpeak;
-        data[i] = A*sin(KPEAK * x);
+        data[i].x = A*sin(KPEAK * x);
+        data[i].y = 0.;
     }
 }
-void set_sine_real(double* data, double dx, double A, int kpeak, int N){
+void set_sine_real(cufftDoubleComplex* data, 
+		 double dx, double A, int kpeak, int N){
     int block = 256;
     int grid = (N + block - 1) / block;
     sine_kernel<<<grid, block>>>(data, dx, A, kpeak, N);
 }
-__global__ void cosine_kernel(double* data, int N, double dx, double A, int kpeak) {
+//---------------------------------------
+__global__ void cosine_kernel(cufftDoubleComplex* data, 
+		   int N, double dx, double A, int kpeak) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < N) {
         double x = i * dx;
 	double KPEAK = (double) kpeak;
-        data[i] = A*cos(KPEAK * x);
+        data[i].x = A*cos(KPEAK * x);
+        data[i].y = 0.;
 
     }
 }
-void set_cosine_real(double* data, double dx, double A, int kpeak, int N){
+void set_cosine_real(cufftDoubleComplex* data, 
+		 double dx, double A, int kpeak, int N){
     int block = 256;
     int grid = (N + block - 1) / block;
     cosine_kernel<<<grid, block>>>(data, N, dx, A, kpeak);
+}
+//-----------------------//
+__global__ void exp_ix_kernel(cufftDoubleComplex* data, 
+		   int N, double dx, double A, int kpeak) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < N) {
+        double x = i * dx;
+	double KPEAK = (double) kpeak;
+        data[i].x = A*cos(KPEAK * x);
+        data[i].y = A*sin(KPEAK * x);
+    }
+}
+void exp_ix(cufftDoubleComplex* data, 
+		 double dx, double A, int kpeak, int N){
+    int block = 256;
+    int grid = (N + block - 1) / block;
+    exp_ix_kernel<<<grid, block>>>(data, N, dx, A, kpeak);
 }
