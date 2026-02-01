@@ -30,6 +30,7 @@ def main():
 
     # --- fixed files to link ---
     fixed_files = [
+        ("./", "end2end.cu"),
         ("./", "run.cu"),
         ("./", "run.h"),
         ("./", "start.cu"),
