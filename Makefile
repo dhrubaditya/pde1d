@@ -1,37 +1,64 @@
-# ================================
-# CUDA FFT Project Makefile
-# ================================
+# ==========================
+# CUDA PDE Project Makefile
+# ==========================
 
-# Compiler and flags
-NVCC       := nvcc -ccbin=g++
-NVCCFLAGS  := -O3  
+# CUDA compiler and host compiler
+NVCC      := nvcc
+CXX       := g++ 
 
-# Output binary name
-TARGET      := start
-# Source and object files
-SRC_START        := start.cu misc.cu fft_utils.cu initcond.cu io.cu 
-OBJ_START        := $(SRC_START:.cu=.o)
+# Compilation and linking flags
+NVCCFLAGS := -ccbin=$(CXX) -O3 -dc
+##NVCCFLAGS := -ccbin=$(CXX) -g -G -O0 -dc
+LDFLAGS   := -lcufft -lcurand -lcudart
 
-# Header dependency
-DEPS       := start.h fft_utils.h misc.h initcond.h io.h 
+# Executable name
+RUN    := pde1d.x
+START  := start.x
+E2E  := e2e.x
 
-# CUDA libraries (cuFFT and runtime)
-LIBS       := -lcufft -lcudart -lcurand
+# Source and object files for START
+SRC_START = start.cu initcond.cu misc.cu fft_utils.cu io.cu
+OBJ_START = $(SRC_START:.cu=.o)
+SRC_E2E = end2end.cu initcond.cu misc.cu fft_utils.cu model.cu io.cu 
+OBJ_E2E = $(SRC_E2E:.cu=.o) 
 
-# Default target
-all: $(TARGET)
+# Default rule
+start: $(START)
+e2e: $(E2E)
+run: $(RUN)
 
-# Link step
-$(TARGET): $(OBJ_START)
-	$(NVCC) $(NVCCFLAGS) $(OBJ_START) -o start.x  $(LIBS)
+# Compile each CUDA source file with separate compilation (-dc)
+%.o: %.cu
+	@echo "Compiling $< -> $@ "
+	$(NVCC) $(NVCCFLAGS)  $< -o $@
 
-# Compilation rule for .cu → .o
-%.o: %.cu $(DEPS)
-	$(NVCC) $(NVCCFLAGS) -dc $< -o $@
+# Link all object files into the final executable
+$(START): $(OBJ_START)
+	@echo "Linking objects -> $(START)"
+	$(NVCC) -ccbin=$(CXX) $(OBJ_START) -o $@ $(LDFLAGS)
+$(E2E): $(OBJ_E2E)
+	@echo "Linking objects -> $(E2E)"
+	$(NVCC) -ccbin=$(CXX) $(OBJ_E2E) -o $@ $(LDFLAGS)
 
-# Clean build artifacts
+# Cleanup rules
 clean:
-	rm -f $(OBJ_START) start.x *.cu~ *.h~ 
+	rm -f *.o *.ptx *.linkinfo
 
-# Phony targets
-.PHONY: all clean
+distclean: clean
+	rm -f $(TARGET)
+
+# Show configuration info
+info:
+	@echo "---------------- CUDA Build Info ----------------"
+	@echo "NVCC       = $(NVCC)"
+	@echo "CXX        = $(CXX)"
+	@echo "ARCH       = $(ARCH)"
+	@echo "NVCCFLAGS  = $(NVCCFLAGS)"
+	@echo "LDFLAGS    = $(LDFLAGS)"
+	@echo "SRC        = $(SRC)"
+	@echo "OBJ        = $(OBJ)"
+	@echo "TARGET     = $(TARGET)"
+	@echo "------------------------------------------------"
+
+.PHONY: all clean distclean info
+
