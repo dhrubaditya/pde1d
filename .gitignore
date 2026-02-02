@@ -4,3 +4,7 @@
 *.ptx
 *.cubin
 *.fatbin
+*.o
+*.x
+a.out
+*.out

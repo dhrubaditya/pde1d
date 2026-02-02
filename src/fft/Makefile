@@ -3,7 +3,7 @@
 # ================================
 
 # Compiler and flags
-NVCC       := nvcc -ccbin=/usr/bin/g++-9
+NVCC       := nvcc -ccbin=g++
 NVCCFLAGS  := -O3  
 
 # Output binary name
@@ -29,14 +29,14 @@ LIBS       := -lcufft -lcudart -lcurand
 
 # Default target
 all: $(TARGET)
+# Compilation rule for .cu → .o
+%.o: %.cu $(DEPS)
+	$(NVCC) $(NVCCFLAGS) -dc $< -o $@
 
 # Link step
 $(TARGET): $(OBJ)
 	$(NVCC) $(NVCCFLAGS) -o $@ $^ $(LIBS)
 
-# Compilation rule for .cu → .o
-%.o: %.cu $(DEPS)
-	$(NVCC) $(NVCCFLAGS) -dc $< -o $@
 
 # Clean build artifacts
 clean:

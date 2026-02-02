@@ -51,7 +51,6 @@ void complex2FFTArray(FFTArray1D& Arr,
 		      int N, bool is_fourier)
 {
   Arr.N = N;
-  Arr.IsFourier = is_fourier;
   int block = 256;
   int grid = (N + block - 1) / block;
   complex2fft_kernel<<<grid, block>>>(Arr.d_complex, yy, N );

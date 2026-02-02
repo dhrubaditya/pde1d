@@ -2,6 +2,7 @@
 #include <fstream>
 #include <cmath>
 #include <cuda_runtime.h>
+#include <cstdio>
 #include "fft_utils.h"
 #define CUDA_CHECK(call)                                                    \
     do {                                                                    \
@@ -13,6 +14,19 @@
         }                                                                   \
     } while (0)
 
+void printDeviceInfo()
+{
+    int dev = 0;
+    cudaDeviceProp p;
+    cudaGetDeviceProperties(&p, dev);
+
+    printf("Running on %s (compute %d.%d)\n",
+           p.name, p.major, p.minor);
+    printf("  Global mem: %.1f GB\n",
+           p.totalGlobalMem / (1024.0*1024*1024));
+}
+
+
 int main(int argc, char* argv[]){
     int N = 128;              // number of real samples
     int kf = 4;
@@ -21,6 +35,7 @@ int main(int argc, char* argv[]){
     kf = std::atoi(argv[2]);
     printf("Grid size N = %d\n", N);
     printf("kf  = %d\n", kf);    
+    printDeviceInfo();
     // ----------------------------
     // Allocate FFT array and plan
     // ----------------------------

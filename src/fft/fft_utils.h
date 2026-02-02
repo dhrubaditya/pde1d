@@ -10,7 +10,7 @@ struct FFTArray1D {
     bool IsFourier = true;
 };
 
-// Allocate GPU memory for in-place R2C/C2R transforms
+// Allocate GPU memory for in-place C2C transforms
 FFTArray1D fft_alloc_1d(int N);
 // Free memory
 void fft_free_1d(FFTArray1D& arr);
