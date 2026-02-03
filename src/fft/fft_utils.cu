@@ -367,19 +367,20 @@ void  complex_mult_FFTArray(FFTArray1D& arr, cufftDoubleComplex z){
 //------------------------------------//
 __global__ void derivk_kernel(cufftDoubleComplex* data, double hh, int N,
 			      bool babs){
+    //Only babs = T has been tested. 
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= N) return;
     if (i == 0) return;
 
    //
    int ik = fft_freq(i, N);
-   double kk = (double) abs(ik) ;
    if (babs){
+     double kk = (double) abs(ik) ;
      data[i].x = pow(kk,hh)*data[i].x ; 
      data[i].y = pow(kk,hh)*data[i].y ;
    }else{ 
      cufftDoubleComplex Ikk;
-     Ikk.x  = 0; Ikk.y = kk;
+     Ikk.x  = 0; Ikk.y = (double) ik;
      cufftDoubleComplex IIkh = cuCpow(Ikk,hh);
      cufftDoubleComplex fk;
      fk.x = data[i].x;
