@@ -197,24 +197,6 @@ double Hamiltonian(FFTPlan1D& plan, FFTArray1D& psik){
   return HH;
 }
 //  Transform between vv and psi 
-__global__ void psik_to_vv__kernel(const cufftDoubleComplex* d_psik,
-			   cufftDoubleComplex* d_vv,
-			   double time, int N){
-  int i = blockIdx.x * blockDim.x + threadIdx.x;
-  if (i >= N) return;
-  if (i == 0) return;
-  //
-  if (time == 0.){
-    d_vv[i].x = d_psik[i].x;
-    d_vv[i].y = d_psik[i].y;
-  }else{
-    int ik = fft_freq(i, N);
-    double kk = (double) abs(ik) ;
-    cufftDoubleComplex G = Green(kk);
-    cufftDoubleComplex emGt = exp_cuComplex(G, -time);
-    d_vv[i] = cuCmul(emGt, d_psik[i]);
-  }
-}
 //
 __global__ void vv_to_psik__kernel(const cufftDoubleComplex* d_vv,
 			   cufftDoubleComplex* d_psik,
@@ -249,31 +231,60 @@ void exp_inv_transform(cufftDoubleComplex* vv,
 				      time, N);
 }
 //
+__global__ void exp_transform_kernel(const cufftDoubleComplex* d_psik,
+			   cufftDoubleComplex* d_vv,
+			   double time, 
+			   bool mbyi, int N){
+  cufftDoubleComplex vv;
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= N) return;
+  if (i == 0) return;
+  //
+  if (time == 0.){
+    vv.x = d_psik[i].x;
+    vv.y = d_psik[i].y;
+  }else{
+    int ik = fft_freq(i, N);
+    double kk = (double) abs(ik) ;
+    cufftDoubleComplex G = Green(kk);
+    cufftDoubleComplex emGt = exp_cuComplex(G, -time);
+    vv = cuCmul(emGt, d_psik[i]);
+  }
+  if (mbyi){
+     d_vv[i].x =   vv.y ;
+     d_vv[i].y = -vv.x ;
+  }else{
+     d_vv[i].x = vv.x ;
+     d_vv[i].y = vv.y ;
+  } 
+}
+// 
 void exp_transform(cufftDoubleComplex* psik,
-		   cufftDoubleComplex* vv, double time, int N ){
+		   cufftDoubleComplex* vv, double time, 
+		   bool mult_by_i, int N ){
   FFTArray1D Fpsik;
   FFTArray1D Fvv;
   complex2FFTArray(Fpsik, psik, N, true);
   complex2FFTArray(Fvv, vv, N, true);
-  int nfreqs = N / 2 + 1;
   int block = 256;
-  int grid = (nfreqs + block - 1) / block;
-  psik_to_vv__kernel<<<grid, block>>>(Fpsik.d_complex,
+  int grid = (N + block - 1) / block;
+  exp_transform_kernel<<<grid, block>>>(Fpsik.d_complex,
 				      Fvv.d_complex,
-				      time, N);
+				      time, mult_by_i, N);
 }
 //---------------------
 __global__ void mult_prefactor_rhsv_kernel(cufftDoubleComplex* d_psi4,
 			       cufftDoubleComplex* vrhs,
 			       double time, double dt,
 			       int N){
+// obtain (-i)exp(-Gt)( NL ) in Fourier space
   int i = blockIdx.x * blockDim.x + threadIdx.x;
-  int nfreqs = N / 2 + 1;
-  if (i >= nfreqs) return;
+  if (i >= N) return;
   if (i == 0) return;
+  int ik = fft_freq(i, N);
+  double kk = (double) ik; 
   //
   cufftDoubleComplex rhs;
-  double kk = (double) i;  
   if (time == 0){
     rhs.x = d_psi4[i].x ;
     rhs.y = d_psi4[i].y ;
@@ -283,7 +294,7 @@ __global__ void mult_prefactor_rhsv_kernel(cufftDoubleComplex* d_psi4,
     rhs = cuCmul(emGt,d_psi4[i]);
   }
   vrhs[i].x =    dt * rhs.y ;
-  vrhs[i].y = -  dt * rhs.x ;    
+  vrhs[i].y = -  dt * rhs.x ; 
 }
 //---------------------
 void compute_nlin(const FFTArray1D& psik){
@@ -302,13 +313,9 @@ void compute_nlin(const FFTArray1D& psik){
 //---------------------
 void compute_rhsv(const FFTArray1D& psik, FFTArray1D& rhs,
 		  double time, double dt){
-  compute_nlin(psik); // the nlin term is stored in NLIN 
-  int N = psik.N;
-  int nfreqs = N / 2 + 1;
-  int block = 256;
-  int grid = (nfreqs + block - 1) / block;
-  mult_prefactor_rhsv_kernel<<<grid, block>>>(NLIN.d_complex,
-				       rhs.d_complex, time, dt, N); 
+  compute_nlin(psik); // the nlin term is stored in NLIN
+  exp_transform(NLIN.d_complex, rhs.d_complex, 
+		  time, True, psik.N);
 }
 //-------------------
 cufftDoubleComplex sum_psi_star_nlin_psi(const FFTArray1D& psik)

@@ -12,7 +12,7 @@ def safe_symlink(src, dest):
 
 def main():
     if len(sys.argv) != 5:
-        print("Usage: python3 setup_build_dir.py <path_to_src> <new_dir_name> <model_name> <evolve_name>")
+        print("Usage: python3 build.py <path_to_src> <new_dir_name> <model_name> <evolve_name>")
         sys.exit(1)
 
     src_root = os.path.abspath(sys.argv[1])
