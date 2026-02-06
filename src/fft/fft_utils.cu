@@ -41,8 +41,8 @@ __global__ void complex2fft_kernel(cufftDoubleComplex* A,
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < N  ) {
-	B[i].x = A[i].x ;
-	B[i].y = A[i].y ;
+	A[i].x = B[i].x ;
+	A[i].y = B[i].y ;
     }
 }
 //-------------------------//

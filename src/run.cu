@@ -57,7 +57,9 @@ int main() {
 //
     std::cout << "Reading run parameters .." << std::endl;
     const RParams h_Rparams = read_Rparams("./input/run.in");
-    std::cout << "..done" << std::endl;
+    std::cout << "dt = " << h_Rparams.dt << std::endl;
+    std::cout << "..done" << std::endl; 
+    double dt = h_Rparams.dt;
 // section 2 : read initial condition 
 /*
     if(h_Rparams.run){
@@ -70,19 +72,18 @@ int main() {
  //  section 4 : timestepping
     TimeStepDeviceData TStep = TimeStep_allocate_device_memory(N);
     // N because of complex->complex fft 
-    DiagData Diag = setup_diag(N);
-    double time = 0.
-    for (int iouter = 0; iouter < h_Rparams.NITER/h_Rparams.NAVG; iouter++){
-      for(int iinner = 0; iinner < h_Rparams.NAVG; iinner++){
-	ExpScheme(d_psi, N, RParams.dt, TStep);
+    //DiagData Diag = setup_diag(N);
+    double time = 0.;
+    //for (int iouter = 0; iouter < h_Rparams.NITER/h_Rparams.NAVG; iouter++){
+     // for(int iinner = 0; iinner < h_Rparams.NAVG; iinner++){
+	ExpScheme(d_psi.d_complex, N, dt, TStep);
 	time = time + dt;
-      }
-      compute_diag(d_psi, Diag);
-    }
-    write_diag(Diag);
-    write_data(d_psi);
+      //}
+      //compute_diag(d_psi, Diag);
+    //}
+    //write_diag(Diag);
+    //write_data(d_psi);
 // endsection
-*/
 // section : clean up 
     cudaFreeHost(psi); cudaFreeHost(psik);
     fft_free_1d(d_psi);

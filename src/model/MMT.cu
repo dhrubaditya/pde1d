@@ -274,7 +274,7 @@ void compute_nlin(const FFTArray1D& psik){
 }
 //---------------------
 void compute_rhsv(cufftDoubleComplex* RHS, 
-	 	  const cufftDoubleComplex* psik,
+	 	  cufftDoubleComplex* d_psik,
 		  double time, int N){
   FFTArray1D Fpsik;
   complex2FFTArray(Fpsik, d_psik, N, true);
