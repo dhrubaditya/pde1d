@@ -32,7 +32,5 @@ TimeStepDeviceData TimeStep_allocate_device_memory(int N);
 // ---------------------------------------------------------------------
 void TimeStep_free_device_memory(TimeStepDeviceData& dev);
 // ---------------------------------------------------------------------
-void ExpScheme(double* d_psi, int N,  double dt, 
-		       TimeStepDeviceData& dev)
-
-
+void ExpScheme(cufftDoubleComplex* d_psi, int N,  double dt, 
+		       TimeStepDeviceData& dev);

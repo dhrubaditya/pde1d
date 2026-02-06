@@ -197,42 +197,8 @@ double Hamiltonian(FFTPlan1D& plan, FFTArray1D& psik){
   return HH;
 }
 //  Transform between vv and psi 
-//
-__global__ void vv_to_psik__kernel(const cufftDoubleComplex* d_vv,
-			   cufftDoubleComplex* d_psik,
-			   double time, int N){
-  int i = blockIdx.x * blockDim.x + threadIdx.x;
-  if (i >= N) return;
-  if (i == 0) return;
-  //
-  if (time == 0.){
-     d_psik[i].x = d_vv[i].x;
-     d_psik[i].y = d_vv[i].y;
-  }else{
-    int ifreq = fft_freq(i, N);
-    int ik = abs(ifreq);
-    double kk = (double) ik ;
-    cufftDoubleComplex G = Green(kk);
-    cufftDoubleComplex eGt = exp_cuComplex(G, time);
-    d_psik[i] = cuCmul(eGt, d_vv[i]);
-  }
-}
-void exp_inv_transform(cufftDoubleComplex* vv, 
-		      cufftDoubleComplex* psik, double time, int N )
-{
-  FFTArray1D Fpsik;
-  FFTArray1D Fvv;
-  complex2FFTArray(Fpsik, psik, N, true);
-  complex2FFTArray(Fvv, vv, N, true);
-  int block = 256;
-  int grid = (N + block - 1) / block;
-  vv_to_psik__kernel<<<grid, block>>>(Fvv.d_complex,
-				      Fpsik.d_complex,
-				      time, N);
-}
-//
-__global__ void exp_transform_kernel(const cufftDoubleComplex* d_psik,
-			   cufftDoubleComplex* d_vv,
+__global__ void exp_transform_kernel(cufftDoubleComplex* d_out,
+			   const cufftDoubleComplex* d_in,
 			   double time, 
 			   bool mbyi, int N){
   cufftDoubleComplex vv;
@@ -241,35 +207,31 @@ __global__ void exp_transform_kernel(const cufftDoubleComplex* d_psik,
   if (i == 0) return;
   //
   if (time == 0.){
-    vv.x = d_psik[i].x;
-    vv.y = d_psik[i].y;
+    vv.x = d_in[i].x;
+    vv.y = d_in[i].y;
   }else{
     int ik = fft_freq(i, N);
     double kk = (double) abs(ik) ;
     cufftDoubleComplex G = Green(kk);
     cufftDoubleComplex emGt = exp_cuComplex(G, -time);
-    vv = cuCmul(emGt, d_psik[i]);
+    vv = cuCmul(emGt, d_in[i]);
   }
   if (mbyi){
-     d_vv[i].x =   vv.y ;
-     d_vv[i].y = -vv.x ;
+     d_out[i].x =   vv.y ;
+     d_out[i].y = -vv.x ;
   }else{
-     d_vv[i].x = vv.x ;
-     d_vv[i].y = vv.y ;
+     d_out[i].x = vv.x ;
+     d_out[i].y = vv.y ;
   } 
 }
 // 
-void exp_transform(cufftDoubleComplex* psik,
-		   cufftDoubleComplex* vv, double time, 
-		   bool mult_by_i, int N ){
-  FFTArray1D Fpsik;
-  FFTArray1D Fvv;
-  complex2FFTArray(Fpsik, psik, N, true);
-  complex2FFTArray(Fvv, vv, N, true);
+void exp_transform(cufftDoubleComplex* vv,
+		   cufftDoubleComplex* psik, double time, 
+		   bool mult_by_i, int N){
+// also works as inverse transform with time -> -time
   int block = 256;
   int grid = (N + block - 1) / block;
-  exp_transform_kernel<<<grid, block>>>(Fpsik.d_complex,
-				      Fvv.d_complex,
+  exp_transform_kernel<<<grid, block>>>(vv, psik, 
 				      time, mult_by_i, N);
 }
 //---------------------
@@ -311,11 +273,14 @@ void compute_nlin(const FFTArray1D& psik){
                           //(k^{-beta/4}F( |NL|^2 NL )
 }
 //---------------------
-void compute_rhsv(const FFTArray1D& psik, FFTArray1D& rhs,
-		  double time, double dt){
-  compute_nlin(psik); // the nlin term is stored in NLIN
-  exp_transform(NLIN.d_complex, rhs.d_complex, 
-		  time, True, psik.N);
+void compute_rhsv(cufftDoubleComplex* RHS, 
+	 	  const cufftDoubleComplex* psik,
+		  double time, int N){
+  FFTArray1D Fpsik;
+  complex2FFTArray(Fpsik, d_psik, N, true);
+  compute_nlin(Fpsik); // the nlin term is stored in NLIN
+  exp_transform(RHS, NLIN.d_complex,  
+		  time, true, Fpsik.N);
 }
 //-------------------
 cufftDoubleComplex sum_psi_star_nlin_psi(const FFTArray1D& psik)
@@ -373,17 +338,10 @@ void copy_NLIN2host(cufftDoubleComplex* h_nlin, double* h_nlink,
 // ------------------------------------------------------
 // Compute RHS 
 // ------------------------------------------------------
-void compute_rhs_model(cufftDoubleComplex* d_vv,
-		       cufftDoubleComplex* d_psik,
-		       cufftDoubleComplex* RHS,
-		       double tt, double dt, int N,
-		       int stage)
+void compute_rhs(cufftDoubleComplex* RHS,
+		 cufftDoubleComplex* d_psik,
+		 double tt, int N,
+		 int stage)
 {
-  FFTArray1D Fvv;
-  FFTArray1D Fpsik;
-  FFTArray1D Frhs;
-  complex2FFTArray(Fvv, d_vv, N, true);
-  complex2FFTArray(Fpsik, d_psik, N, true);
-  complex2FFTArray(Frhs, RHS, N, true);
-  compute_rhsv(Fpsik, Frhs, tt, dt); 
+  compute_rhsv(RHS, d_psik, tt, N); 
 }

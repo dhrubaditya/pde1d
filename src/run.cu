@@ -33,42 +33,48 @@ int main() {
     std::cout << "DK = " << h_Sparams.DK << std::endl;
 
 // endsection
-// section 2 : read initial condition 
+// section 2 : initial condition 
     int N = h_Sparams.NX;
     double dk = h_Sparams.DK;
     double dx = h_Sparams.DX;
 
     // --- Host memory  ---
-    cufftDoubleReal *psi, *psik;
+    cufftDoubleComplex *psi;
+    cufftDoubleComplex *psik;
     CUDA_CHECK(cudaMallocHost((void**)&psi,
-			      sizeof(cufftDoubleReal) * (N + 2) ));
+                              sizeof(cufftDoubleComplex) * N  ));
     CUDA_CHECK(cudaMallocHost((void**)&psik,
-                               sizeof(cufftDoubleReal) * (N + 2) ));
-    // N+2 because fft needs extra storage.
+                               sizeof(cufftDoubleComplex) * N ));
+    // Remember we are arrays that are complex in real space.   
     cufftDoubleReal *Ek;
     CUDA_CHECK(cudaMallocHost((void**)&Ek,
-    			      sizeof(double) * (N/2 + 1) ));
+                              sizeof(double) * N ));
     // device memory
     FFTArray1D d_psi = fft_alloc_1d(N);
-    //
+    FFTPlan1D plan = fft_plan_create_1d(N);
+    double* d_Ek;
+    CUDA_CHECK(cudaMalloc(&d_Ek, sizeof(double) * N) );
+//
     std::cout << "Reading run parameters .." << std::endl;
     const RParams h_Rparams = read_Rparams("./input/run.in");
     std::cout << "..done" << std::endl;
+// section 2 : read initial condition 
+/*
     if(h_Rparams.run){
       read_initcond(psi, psik, N, RParams);
     }else{
       clean_exit_host("No initial condition, run start first",1);
-    }
+    } */
  // section 3 : Model
     setup_model(N);
  //  section 4 : timestepping
-    TimeStepDeviceData TStep = TimeStep_allocate_device_memory(N + 2);
-    // N + 2 because of FFT structure
+    TimeStepDeviceData TStep = TimeStep_allocate_device_memory(N);
+    // N because of complex->complex fft 
     DiagData Diag = setup_diag(N);
     double time = 0.
     for (int iouter = 0; iouter < h_Rparams.NITER/h_Rparams.NAVG; iouter++){
       for(int iinner = 0; iinner < h_Rparams.NAVG; iinner++){
-	ExpScheme(d_psi, N + 2, RParams.dt, TStep);
+	ExpScheme(d_psi, N, RParams.dt, TStep);
 	time = time + dt;
       }
       compute_diag(d_psi, Diag);
@@ -76,11 +82,11 @@ int main() {
     write_diag(Diag);
     write_data(d_psi);
 // endsection
-
+*/
 // section : clean up 
     cudaFreeHost(psi); cudaFreeHost(psik);
     fft_free_1d(d_psi);
-    TimeStep_free_device_memory(dev);
+    //TimeStep_free_device_memory(dev);
     cleanup_model();
     std::cout << "Code Exited Cleanly" << std::endl;
 //

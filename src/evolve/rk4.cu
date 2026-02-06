@@ -1,5 +1,5 @@
 // rk4.cu
-#include "rk4.h"
+#include "evolve.h"
 #include "model.h"   // declaration of rhs_kernel 
 #include <cstdio>
 
@@ -17,9 +17,9 @@ static const int BLOCK_SIZE = RK4_BLOCK_SIZE;
 
 // ---------------- kernels ----------------
 // combine stage: Ytemp = Y + a * k
-__global__ void combine_stage_kernel(double* Ytemp,
-                                     const double* Y,
-                                     const double* k,
+__global__ void combine_stage_kernel(cufftDoubleComplex* Ytemp,
+                                     const cufftDoubleComplex* Y,
+                                     const cufftDoubleComplex* k,
                                      double a,
                                      int N)
 {
@@ -28,11 +28,11 @@ __global__ void combine_stage_kernel(double* Ytemp,
 }
 
 // final RK4 update: Y <- Y + (k1 + 2*k2 + 2*k3 + k4)/6
-__global__ void rk4_update_kernel(double* Y,
-                                  const double* k1,
-                                  const double* k2,
-                                  const double* k3,
-                                  const double* k4,
+__global__ void rk4_update_kernel(cufftDoubleComplex* Y,
+                                  const cufftDoubleComplex* k1,
+                                  const cufftDoubleComplex* k2,
+                                  const cufftDoubleComplex* k3,
+                                  const cufftDoubleComplex* k4,
                                   int N)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -46,12 +46,12 @@ TimeStepDeviceData TimeStep_allocate_device_memory(int N)
     TimeStepDeviceData dev;
     dev.is_initialized = false;
 
-    CUDA_CHECK(cudaMalloc(&dev.d_Y, N * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&dev.d_Ytemp, N * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&dev.d_k1,    N * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&dev.d_k2,    N * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&dev.d_k3,    N * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&dev.d_k4,    N * sizeof(double)));
+    CUDA_CHECK(cudaMalloc(&dev.d_Y, N * sizeof(cufftDoubleComplex) ));
+    CUDA_CHECK(cudaMalloc(&dev.d_Ytemp, N * sizeof(cufftDoubleComplex) ));
+    CUDA_CHECK(cudaMalloc(&dev.d_k1,    N * sizeof(cufftDoubleComplex) ));
+    CUDA_CHECK(cudaMalloc(&dev.d_k2,    N * sizeof(cufftDoubleComplex) ));
+    CUDA_CHECK(cudaMalloc(&dev.d_k3,    N * sizeof(cufftDoubleComplex) ));
+    CUDA_CHECK(cudaMalloc(&dev.d_k4,    N * sizeof(cufftDoubleComplex) );
 
     return dev;
 }
@@ -71,7 +71,7 @@ void rk4_free_device_memory(TimeStepDeviceData& dev)
 }
 
 //-----------------------------------//
-void ExpScheme(double* d_psi, int N,  double dt, 
+void ExpScheme(cufftDoubleComplex* d_psi, int N,  double dt, 
 		       TimeStepDeviceData& dev)
 {
     if (N <= 0) return;
@@ -79,9 +79,9 @@ void ExpScheme(double* d_psi, int N,  double dt,
     const int blocks  = (N + threads - 1) / threads;
     double tt = 0;
     // First transform variable
-    exp_transform(d_psi, dev.d_Y, tt, N);
+    exp_transform(d_Y, dev.d_psi, tt, false, N);
     // Stage 1: k1 = dt * f(Y) -> dev.d_k1
-    compute_rhs(dev.d_Y, d_psi, dev.d_k1, tt, dt, N, 1);
+    compute_rhs(dev.d_k1, d_psi, tt, N, 1);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
     
@@ -91,8 +91,8 @@ void ExpScheme(double* d_psi, int N,  double dt,
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
     tt = dt/2.;
-    exp_inv_transform(dev.d_Ytemp, d_psi, tt, N);
-    compute_rhs(dev.d_Ytemp, dev.d_k2, tt, dt, N, 2);
+    exp_transform(dev.d_psi, d_Ytemp, -tt, false, N); //actually inverse transform
+    compute_rhs(dev.d_k2, d_psi, tt, N, 2);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
     
@@ -102,8 +102,8 @@ void ExpScheme(double* d_psi, int N,  double dt,
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
     tt = dt/2.;
-    exp_inv_transform(dev.d_Ytemp, d_psi, tt, N);
-    compute_rhs(dev.d_Ytemp, dev.d_k3, tt, dt, N, 3);
+    exp_transform(dev.d_psi, d_Ytemp, -tt, false, N); //actually inverse transform
+    compute_rhs(dev.d_k3, d_psi, tt, N, 3);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
     
@@ -113,8 +113,8 @@ void ExpScheme(double* d_psi, int N,  double dt,
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
     tt = dt;
-    exp_inv_transform(d_Ytemp, d_psi, tt, N);
-    compute_rhs(dev.d_Ytemp, dev.d_k3, tt, dt, N, 4);
+    exp_transform(dev.d_psi, d_Ytemp, -tt, false, N); //actually inverse transform
+    compute_rhs(dev.d_k4, d_psi, tt, N, 4);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
       
@@ -122,7 +122,7 @@ void ExpScheme(double* d_psi, int N,  double dt,
     rk4_update_kernel<<<blocks, threads>>>(dev.d_Y,
 					   dev.d_k1, dev.d_k2,
 					   dev.d_k3, dev.d_k4, N);
-    exp_inv_transform(dev.d_Y, d_psi, dt, N);
+    exp_transform(dev.d_psi, d_Y, -dt, false, N); //actually inverse transform
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
     

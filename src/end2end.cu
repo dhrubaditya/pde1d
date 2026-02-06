@@ -42,7 +42,7 @@ int main() {
 			      sizeof(cufftDoubleComplex) * N  ));
     CUDA_CHECK(cudaMallocHost((void**)&psik,
                                sizeof(cufftDoubleComplex) * N ));
-    // N+2 because fft needs extra storage.
+    // Remember we are arrays that are complex in real space.   
     cufftDoubleReal *Ek;
     CUDA_CHECK(cudaMallocHost((void**)&Ek,
     			      sizeof(double) * N ));
@@ -61,7 +61,7 @@ int main() {
       compute_normalized_spectrum(d_psi, d_Ek);
       copy_FFTArray_host_complex(psik, d_psi);
     }else{
-      clean_exit_host("e2e: checking nlin works with FOURIER icond", 0);
+      clean_exit_host("e2e: initial condition in real not coded", 0);
     }
     CUDA_CHECK(cudaMemcpy(Ek, d_Ek, sizeof(double) * N,
 			  cudaMemcpyDeviceToHost));
@@ -78,17 +78,7 @@ int main() {
     cufftDoubleComplex test = test_NN_conservation(d_psi);
     std::cout << test.x << " " <<test.y << "\n";
     std::cout << "..done \n" ;
-    /* std::cout << "Testing calcn of nlin .." << std::endl;
-    cufftDoubleComplex* h_nlin; 
-    CUDA_CHECK(cudaMallocHost(&h_nlin, sizeof(cufftDoubleComplex) * N ) );
-    double* Ek_nlin;
-    CUDA_CHECK(cudaMallocHost(&Ek_nlin, sizeof(double) * N ) );
-    copy_NLIN2host(h_nlin, Ek_nlin, d_psi);
-    std::cout << "writing data .." << std::endl;
-    write_complex_array(h_nlin, dk, N, "nlin.out");
-    write_spectrum(Ek_nlin, N, dk, 1); 
-    cudaFreeHost(Ek_nlin); cudaFreeHost(h_nlin);*/
-    // section : clean up 
+// section : clean up 
     cudaFreeHost(psi); cudaFreeHost(psik); cudaFreeHost(Ek); 
     fft_plan_destroy_1d(plan);
     fft_free_1d(d_psi);
