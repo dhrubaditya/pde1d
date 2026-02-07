@@ -19,7 +19,7 @@
     } while (0)
 // ******************************************** //
 int main(int argc, char** argv){
-    int N = 128;              // number of real samples
+    int N = 128;              // grid size 
     double L = 2 * M_PI;       // domain size
     if (argc > 1) {
       N = std::atoi(argv[1]);
