@@ -1,7 +1,8 @@
 #pragma once
 
 #include <cuda_runtime.h>
-
+#include <cufft.h>
+#include <iostream>
 // Simple macro for default block size
 #ifndef RK4_BLOCK_SIZE
 #define RK4_BLOCK_SIZE 256
@@ -11,12 +12,12 @@
 // Struct holding all device arrays needed for RK4
 // ---------------------------------------------------------------------
 struct TimeStepDeviceData {
-    double* d_Y = nullptr;
-    double* d_Ytemp  = nullptr; // device temp state
-    double* d_k1     = nullptr; // dt * f(Y) stage arrays
-    double* d_k2     = nullptr;
-    double* d_k3     = nullptr;
-    double* d_k4     = nullptr;
+    cufftDoubleComplex* d_Y = nullptr;
+    cufftDoubleComplex* d_Ytemp  = nullptr; // device temp state
+    cufftDoubleComplex* d_k1     = nullptr; // dt * f(Y) stage arrays
+    cufftDoubleComplex* d_k2     = nullptr;
+    cufftDoubleComplex* d_k3     = nullptr;
+    cufftDoubleComplex* d_k4     = nullptr;
 
     // Host-side flag: 
     bool is_initialized = false;

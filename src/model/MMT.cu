@@ -216,7 +216,7 @@ __global__ void exp_transform_kernel(cufftDoubleComplex* d_out,
     cufftDoubleComplex emGt = exp_cuComplex(G, -time);
     vv = cuCmul(emGt, d_in[i]);
   }
-  if (mbyi){
+  if (mbyi){ //multiply by -i
      d_out[i].x =   vv.y ;
      d_out[i].y = -vv.x ;
   }else{
@@ -274,7 +274,7 @@ void compute_nlin(const FFTArray1D& psik){
 }
 //---------------------
 void compute_rhsv(cufftDoubleComplex* RHS, 
-	 	  cufftDoubleComplex* d_psik,
+	 	  const cufftDoubleComplex* d_psik,
 		  double time, int N){
   FFTArray1D Fpsik;
   complex2FFTArray(Fpsik, d_psik, N, true);
@@ -339,7 +339,7 @@ void copy_NLIN2host(cufftDoubleComplex* h_nlin, double* h_nlink,
 // Compute RHS 
 // ------------------------------------------------------
 void compute_rhs(cufftDoubleComplex* RHS,
-		 cufftDoubleComplex* d_psik,
+		 const cufftDoubleComplex* d_psik,
 		 double tt, int N,
 		 int stage)
 {

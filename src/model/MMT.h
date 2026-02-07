@@ -9,7 +9,7 @@ void test_model_param();
 // ------------------------------------------------------
 // Compute RHS 
 // ------------------------------------------------------
-void compute_rhs(double* RHS, const double* d_psik, 
+void compute_rhs(cufftDoubleComplex* RHS, const cufftDoubleComplex* d_psik, 
 		 double tt, int N, int stage);
 void exp_transform(cufftDoubleComplex* psik,
                    cufftDoubleComplex* vv, double time,

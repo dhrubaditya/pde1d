@@ -74,6 +74,6 @@ void exp_ix(cufftDoubleComplex* data,
 void complex_mult_FFTArray(FFTArray1D& arr, cufftDoubleComplex z);
 //void double2FFTArray(FFTArray1D& Arr, double* yy, int N);
 void complex2FFTArray(FFTArray1D& Arr, 
-		     cufftDoubleComplex* yy, int N, bool is_fourier);
+		     const cufftDoubleComplex* yy, int N, bool is_fourier);
 void abs2_times_z_FFTArray(FFTArray1D& A);
 __device__ __host__ int fft_freq(int i, int N);

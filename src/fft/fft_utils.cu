@@ -36,7 +36,7 @@ void copy_FFTArray_host_complex(cufftDoubleComplex* h_arr, FFTArray1D& arr){
 }
 //
 __global__ void complex2fft_kernel(cufftDoubleComplex* A,
-			           cufftDoubleComplex* B,
+			           const cufftDoubleComplex* B,
 			           int N )
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -47,7 +47,7 @@ __global__ void complex2fft_kernel(cufftDoubleComplex* A,
 }
 //-------------------------//
 void complex2FFTArray(FFTArray1D& Arr, 
-		      cufftDoubleComplex* yy, 
+		      const cufftDoubleComplex* yy, 
 		      int N, bool is_fourier)
 {
   Arr.N = N;
