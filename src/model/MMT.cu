@@ -283,23 +283,23 @@ void compute_rhsv(cufftDoubleComplex* RHS,
 		  time, true, Fpsik.N);
 }
 //-------------------
-cufftDoubleComplex sum_psi_star_nlin_psi(const FFTArray1D& psik)
+cufftDoubleComplex sum_nlin_star_psi(const FFTArray1D& psik)
 {
   cufftDoubleComplex sum ;
   if(!NLIN.IsFourier && !psik.IsFourier){
     int N = psik.N;
     int block = 256;
     int grid = (N + block - 1) / block;
-    mult_Astar_B<<<grid, block>>>(psik.d_complex,
-				NLIN.d_complex, N);
+    mult_Astar_B<<<grid, block>>>(NLIN.d_complex,
+		                psik.d_complex,
+				 N);
     GpuComplexReducer ws;
     init_Complex_reducer(ws, N);
-    sum = gpu_Complex_sum(NLIN.d_complex,
-					       N, ws);
+    sum = gpu_Complex_sum(NLIN.d_complex, N, ws);
     free_Complex_reducer(ws);
   }else{
     sum.x = 0.; sum.y = 0.;   
-    clean_exit_host("sum_psi_star_nlin_psi: should be in real space", 1);
+    clean_exit_host("sum_nlin_star_psi: should be in real space", 1);
   }
     return sum;
 }
@@ -314,7 +314,7 @@ cufftDoubleComplex test_NN_conservation(FFTArray1D& psik){
   normalize_fft(NLIN); 
   fft_inverse_inplace(plan, psik);
   normalize_fft(psik); 
-  cufftDoubleComplex Z = sum_psi_star_nlin_psi(psik);
+  cufftDoubleComplex Z = sum_nlin_star_psi(psik);
   return Z;
 }
 //---------------------------

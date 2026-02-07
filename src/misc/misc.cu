@@ -208,13 +208,13 @@ __host__ __device__  cufftDoubleComplex exp_cuComplex(cufftDoubleComplex G,
 //---------------------
 __global__ void mult_Astar_B(cufftDoubleComplex* A,
 			  cufftDoubleComplex* B, int N){
-  // B = A* B
+  // A = A* B
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < N) {
       cufftDoubleComplex C ;
       C.x = A[i].x;
       C.y = -A[i].y;
-      B[i] = cuCmul(C,B[i]);
+      A[i] = cuCmul(C,B[i]);
     }
 }
 //---------------------------------------------------------//
