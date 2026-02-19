@@ -63,6 +63,7 @@ void set_peak_spectrum(FFTArray1D& arr,
 	                         bool sharp);
 void test_fft_freq(int N);
 void set_zero(FFTArray1D& arr);
+void set_zero_cmplx_array(cufftDoubleComplex* A, int N);
 void derivk(FFTArray1D& arr, double hh,  bool abs);
 void copy_FFTArray(const FFTArray1D& A, FFTArray1D& B);
 //void copy_FFTArray_host(double* h_A, FFTArray1D& A);
@@ -72,6 +73,7 @@ void set_cosine_real(double* d_data, double dx, double A, int kpeak, int N);
 void exp_ix(cufftDoubleComplex* data,
                  double dx, double A, int kpeak, int N);
 void complex_mult_FFTArray(FFTArray1D& arr, cufftDoubleComplex z);
+void  AtimesX(cufftDoubleComplex* A, double X, int N);
 //void double2FFTArray(FFTArray1D& Arr, double* yy, int N);
 void complex2FFTArray(FFTArray1D& Arr, 
 		     const cufftDoubleComplex* yy, int N, bool is_fourier);

@@ -263,14 +263,19 @@ void compute_nlin(const FFTArray1D& psik){
   copy_FFTArray(psik, NLIN); // NL = psi(k)
   double beta = h_MP.beta;
   double Epsilon = h_MP.Epsilon;
-  derivk(NLIN, -beta/4,  true); //NL = k^{-\beta/4}psi
-  fft_inverse_inplace(plan, NLIN);
-  normalize_fft(NLIN); //NL = F^{-1}(k^{-\beta/4}psi)
-  abs2_times_z_FFTArray(NLIN); //( |NL|^2 NL ) 
-  fft_forward_inplace(plan, NLIN); //
+  if (Epsilon == 0){
+    set_zero(NLIN);  
+  }else{
+    derivk(NLIN, -beta/4,  true); //NL = k^{-\beta/4}psi
+    fft_inverse_inplace(plan, NLIN);
+    normalize_fft(NLIN); //NL = F^{-1}(k^{-\beta/4}psi)
+    abs2_times_z_FFTArray(NLIN); //( |NL|^2 NL ) 
+    fft_forward_inplace(plan, NLIN); //
                           //F( |NL|^2 NL )
-  derivk(NLIN, -beta/4, true); //
+    derivk(NLIN, -beta/4, true); //
                           //(k^{-beta/4}F( |NL|^2 NL )
+    AtimesX(NLIN.d_complex, Epsilon, NLIN.N);
+  }
 }
 //---------------------
 void compute_rhsv(cufftDoubleComplex* RHS, 
@@ -343,5 +348,11 @@ void compute_rhs(cufftDoubleComplex* RHS,
 		 double tt, int N,
 		 int stage)
 {
-  compute_rhsv(RHS, d_psik, tt, N); 
+
+  double Epsilon = h_MP.Epsilon;
+  if (Epsilon == 0){
+    set_zero_cmplx_array(RHS, N);
+  }else{
+    compute_rhsv(RHS, d_psik, tt, N);
+  } 
 }

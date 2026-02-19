@@ -351,6 +351,14 @@ void set_zero(FFTArray1D& arr){
     set_zero_kernel<<<grid, block>>>(arr.d_complex, arr.N);
     cudaDeviceSynchronize();
 }
+//----------------------------------------
+void set_zero_cmplx_array(cufftDoubleComplex* A, int N){
+    int block = 256;
+    int grid = (N + block - 1) / block; 
+
+    set_zero_kernel<<<grid, block>>>(A, N);
+    cudaDeviceSynchronize();
+}
 //---------------
 __global__ void  complex_mult_kernel(cufftDoubleComplex* data,
 				     cufftDoubleComplex z, int N){
@@ -363,6 +371,20 @@ void  complex_mult_FFTArray(FFTArray1D& arr, cufftDoubleComplex z){
   int block = 256;
   int grid = (arr.N + block - 1) / block;
   complex_mult_kernel<<<grid, block>>>(arr.d_complex, z, arr.N);
+}
+//---------------
+__global__ void  AtimesX_kernel(cufftDoubleComplex* A,
+				     double X, int N){
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= N) return;
+  A[i].x = X*A[i].x; 
+  A[i].y = X*A[i].y; 
+}
+//----------------------------
+void  AtimesX(cufftDoubleComplex* A, double X, int N){
+  int block = 256;
+  int grid = (N + block - 1) / block;
+  AtimesX_kernel<<<grid, block>>>(A, X, N);
 }
 //------------------------------------//
 __global__ void derivk_kernel(cufftDoubleComplex* data, double hh, int N,

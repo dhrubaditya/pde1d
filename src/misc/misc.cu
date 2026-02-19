@@ -218,4 +218,3 @@ __global__ void mult_Astar_B(cufftDoubleComplex* A,
     }
 }
 //---------------------------------------------------------//
-
