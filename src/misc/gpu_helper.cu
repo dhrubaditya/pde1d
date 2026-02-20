@@ -114,3 +114,62 @@ int writeGpuPropertiesToFile(const cudaDeviceProp *prop, int deviceId, const cha
     fclose(f);
     return 0;
 }
+//----------------------------------------//
+cudaError_t getDeviceMemoryUsage(int deviceId, size_t *usedBytes, size_t *freeBytes, size_t *totalBytes) {
+
+    // At least one output pointer must be provided
+    if (usedBytes == NULL && freeBytes == NULL && totalBytes == NULL) {
+        fprintf(stderr, "[getDeviceMemoryUsage] Error: All output pointers are NULL.\n");
+        return cudaErrorInvalidValue;
+    }
+
+    // Save the currently active device so we can restore it afterwards
+    int previousDeviceId = 0;
+    cudaError_t err = cudaGetDevice(&previousDeviceId);
+    if (err != cudaSuccess) {
+        fprintf(stderr, "[getDeviceMemoryUsage] Error getting current device: %s\n",
+                cudaGetErrorString(err));
+        return err;
+    }
+
+    // Switch to the requested device if necessary
+    if (deviceId != previousDeviceId) {
+        err = cudaSetDevice(deviceId);
+        if (err != cudaSuccess) {
+            fprintf(stderr, "[getDeviceMemoryUsage] Error setting device %d: %s\n",
+                    deviceId, cudaGetErrorString(err));
+            return err;
+        }
+    }
+
+    // Query free and total memory on the active device
+    size_t localFree  = 0;
+    size_t localTotal = 0;
+    err = cudaMemGetInfo(&localFree, &localTotal);
+    if (err != cudaSuccess) {
+        fprintf(stderr, "[getDeviceMemoryUsage] Error querying memory info: %s\n",
+                cudaGetErrorString(err));
+        // Restore the original device before returning
+        if (deviceId != previousDeviceId) {
+            cudaSetDevice(previousDeviceId);
+        }
+        return err;
+    }
+
+    // Restore the original device if we switched
+    if (deviceId != previousDeviceId) {
+        err = cudaSetDevice(previousDeviceId);
+        if (err != cudaSuccess) {
+            fprintf(stderr, "[getDeviceMemoryUsage] Error restoring device %d: %s\n",
+                    previousDeviceId, cudaGetErrorString(err));
+            return err;
+        }
+    }
+
+    // Write results to the provided output pointers
+    if (freeBytes  != NULL) *freeBytes  = localFree;
+    if (totalBytes != NULL) *totalBytes = localTotal;
+    if (usedBytes  != NULL) *usedBytes  = localTotal - localFree;
+
+    return cudaSuccess;
+}

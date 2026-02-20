@@ -41,6 +41,8 @@ def main():
         ("random", "random.h"),
         ("misc", "misc.cu"),
         ("misc", "misc.h"),
+        ("misc", "gpu_helper.cu"),
+        ("misc", "gpu_helper.h"),
         ("io", "io.h"),
         ("io", "io.cu"),
         ("initcond", "initcond.h"),

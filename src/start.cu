@@ -9,6 +9,7 @@
 #include "fft_utils.h"
 #include "initcond.h"
 #include "misc.h"
+#include "gpu_helper.h"
 #define CUDA_CHECK(call)                                                    \
     do {                                                                    \
         cudaError_t err = (call);                                           \
@@ -20,7 +21,21 @@
     } while (0)
 // ******************************************** //
 int main() {
-  // section 1 : Input  Parameters
+
+    // section 0 : query to GPU 
+    std::cout << "Checking GPU properties" << std::endl;  
+    int deviceId = 0;
+    cudaDeviceProp prop;
+
+    if (getGpuProperties(&prop, deviceId) != cudaSuccess) {
+        return -1;
+    }
+
+    if (writeGpuPropertiesToFile(&prop, deviceId, "gpu_prop.txt") != 0) {
+        return -1;
+    }
+    std::cout << "GPU properties written to file <gpu_prop.txt>" << std::endl;  
+    // section 1 : Input  Parameters
     const SParams h_Sparams = read_Sparams("./input/start.in");
 
     std::cout << "Simulation parameters:" << std::endl;
@@ -83,7 +98,17 @@ int main() {
 //    cufftDoubleComplex RHSN = test_NN_conservation(d_psi);
 //    std::cout << "RHS is .." << std::endl;
 //    std::cout << RHSN.x << " " << RHSN.y << std::endl;
-// section : clean up 
+// section : clean up
+//  First check how memory has been used
+    size_t usedBytes, freeBytes, totalBytes;
+    if (getDeviceMemoryUsage(deviceId, &usedBytes, &freeBytes, &totalBytes) 
+		    == cudaSuccess) {
+        printf("Device %d memory usage:\n", deviceId);
+        printf("  Used  : %.2f MB\n", (double)usedBytes  / (1024.0 * 1024.0));
+        printf("  Free  : %.2f MB\n", (double)freeBytes  / (1024.0 * 1024.0));
+        printf("  Total : %.2f MB\n", (double)totalBytes / (1024.0 * 1024.0));
+    }
+// Now free memory
     cudaFreeHost(psi); cudaFreeHost(psik); cudaFreeHost(Ek);
     fft_plan_destroy_1d(plan);
     fft_free_1d(d_psi);
