@@ -40,7 +40,7 @@ int main() {
 			      sizeof(cufftDoubleComplex) * N  ));
     CUDA_CHECK(cudaMallocHost((void**)&psik,
                                sizeof(cufftDoubleComplex) * N  ));
-    // N+2 because fft needs extra storage.
+    // complex to complex fft no extra storage 
     cufftDoubleReal *Ek;
     CUDA_CHECK(cudaMallocHost((void**)&Ek,
     			      sizeof(double) * N ));

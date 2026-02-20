@@ -3,17 +3,19 @@
 # ================================
 
 # Compiler and flags
-NVCC       := nvcc -ccbin=/usr/bin/g++-9
+NVCC       := nvcc -ccbin=/usr/bin/g++
 NVCCFLAGS  := -O3  
 
 # Output binary name
 TARGET     := test
 # Source and object files
-SRC        :=  misc.cu random.cu fft_utils.cu main.cu 
+#SRC        :=  misc.cu random.cu fft_utils.cu main.cu 
+SRC        :=  gpu_helper.cu qgpu.cu 
 OBJ        := $(SRC:.cu=.o)
 
 # Header dependency
-DEPS       := fft_utils.h misc.h random.h
+#DEPS       := fft_utils.h misc.h random.h
+DEPS       := gpu_helper.h 
 
 # CUDA libraries (cuFFT and runtime)
 LIBS       := -lcufft -lcudart -lcurand
