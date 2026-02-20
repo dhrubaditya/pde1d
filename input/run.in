@@ -1,0 +1,4 @@
+FOURIER = 1
+NITER = 100
+NAVG = 10
+dt = 1e-2

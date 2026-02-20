@@ -11,6 +11,7 @@
 #include "fft_utils.h"
 #include "initcond.h"
 #include "misc.h"
+#include "gpu_helper.h"
 #include "evolve.h"
 
 #define CUDA_CHECK(call)                                                    \
@@ -24,7 +25,20 @@
     } while (0)
 // ******************************************** //
 int main() {
-  // section 1 : Start  Parameters
+    // section 0 : query to GPU 
+    std::cout << "Checking GPU properties" << std::endl;
+    int deviceId = 0;
+    cudaDeviceProp prop;
+
+    if (getGpuProperties(&prop, deviceId) != cudaSuccess) {
+        return -1;
+    }
+
+    if (writeGpuPropertiesToFile(&prop, deviceId, "gpu_prop.txt") != 0) {
+        return -1;
+    }
+    std::cout << "GPU properties written to file <gpu_prop.txt>" << std::endl;
+    // section 1 : Start  Parameters
     const SParams h_Sparams = read_Sparams("./input/start.in");
 
     std::cout << "Simulation parameters:" << std::endl;
@@ -54,7 +68,28 @@ int main() {
     FFTPlan1D plan = fft_plan_create_1d(N);
     double* d_Ek;
     CUDA_CHECK(cudaMalloc(&d_Ek, sizeof(double) * N) );
-//
+// setup up initial condition (will be responsibility
+// of start.cu later. 
+    std::cout << "Reading initial condition input/icond.in .." << std::endl;
+    const IParams h_Iparams = read_icond("./input/icond.in");
+    std::cout << "..done" << std::endl;
+    std::cout << "Generating initial condition (in device) .." << std::endl;
+    if (h_Iparams.FOURIER){
+      set_initcond(d_psi, dk, dx, h_Iparams);
+      compute_normalized_spectrum(d_psi, d_Ek);
+      copy_FFTArray_host_complex(psik, d_psi);
+    }else{
+      clean_exit_host("e2e: initial condition in real not coded", 0);
+    }
+    CUDA_CHECK(cudaMemcpy(Ek, d_Ek, sizeof(double) * N,
+                          cudaMemcpyDeviceToHost));
+    std::cout << "Writing intial condition to files .." << std::endl;
+    write_complex_array(psik, dk, N, "inicond.out");
+    std::cout << "..done" << std::endl;
+    std::cout << "Writing intial energy spectrum file .." << std::endl;
+    write_spectrum(Ek, N, dk, 0);
+    std::cout << "..done" << std::endl;
+    //
     std::cout << "Reading run parameters .." << std::endl;
     const RParams h_Rparams = read_Rparams("./input/run.in");
     std::cout << "dt = " << h_Rparams.dt << std::endl;
@@ -74,23 +109,33 @@ int main() {
     // N because of complex->complex fft 
     //DiagData Diag = setup_diag(N);
     double time = 0.;
-    //for (int iouter = 0; iouter < h_Rparams.NITER/h_Rparams.NAVG; iouter++){
-     // for(int iinner = 0; iinner < h_Rparams.NAVG; iinner++){
+    for (int iouter = 0; iouter < h_Rparams.NITER/h_Rparams.NAVG; iouter++){
+      for(int iinner = 0; iinner < h_Rparams.NAVG; iinner++){
 	ExpScheme(d_psi.d_complex, N, dt, TStep);
 	time = time + dt;
-      //}
+      }
+      std::cout << "running, time=:\t"<< time << std::endl;
       //compute_diag(d_psi, Diag);
-    //}
+    }
     //write_diag(Diag);
     //write_data(d_psi);
 // endsection
 // section : clean up 
+//  First check how memory has been used
+    size_t usedBytes, freeBytes, totalBytes;
+    if (getDeviceMemoryUsage(deviceId, &usedBytes, &freeBytes, &totalBytes)
+                    == cudaSuccess) {
+        printf("Device %d memory usage:\n", deviceId);
+        printf("  Used  : %.2f MB\n", (double)usedBytes  / (1024.0 * 1024.0));
+        printf("  Free  : %.2f MB\n", (double)freeBytes  / (1024.0 * 1024.0));
+        printf("  Total : %.2f MB\n", (double)totalBytes / (1024.0 * 1024.0));
+    }
+
     cudaFreeHost(psi); cudaFreeHost(psik);
     fft_free_1d(d_psi);
-    //TimeStep_free_device_memory(dev);
+    TimeStep_free_device_memory(TStep);
     cleanup_model();
     std::cout << "Code Exited Cleanly" << std::endl;
 //
     return 0;
 }
-

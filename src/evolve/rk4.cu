@@ -59,8 +59,7 @@ TimeStepDeviceData TimeStep_allocate_device_memory(int N)
 
     return dev;
 }
-
-void rk4_free_device_memory(TimeStepDeviceData& dev)
+void TimeStep_free_device_memory(TimeStepDeviceData& dev)
 {
 
     if (dev.d_Y) cudaFree(dev.d_Y);
