@@ -109,6 +109,7 @@ int main() {
     // N because of complex->complex fft 
     //DiagData Diag = setup_diag(N);
     double time = 0.;
+    std::cout << "starting timestepping, time=:\t"<< time << std::endl;
     for (int iouter = 0; iouter < h_Rparams.NITER/h_Rparams.NAVG; iouter++){
       for(int iinner = 0; iinner < h_Rparams.NAVG; iinner++){
 	ExpScheme(d_psi.d_complex, N, dt, TStep);

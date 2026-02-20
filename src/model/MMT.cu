@@ -233,6 +233,8 @@ void exp_transform(cufftDoubleComplex* vv,
   int grid = (N + block - 1) / block;
   exp_transform_kernel<<<grid, block>>>(vv, psik, 
 				      time, mult_by_i, N);
+  std::cout << "exp transform work" <<std::endl;
+
 }
 //---------------------
 __global__ void mult_prefactor_rhsv_kernel(cufftDoubleComplex* d_psi4,
@@ -283,7 +285,9 @@ void compute_rhsv(cufftDoubleComplex* RHS,
 		  double time, int N){
   FFTArray1D Fpsik;
   complex2FFTArray(Fpsik, d_psik, N, true);
+  std::cout << "FFT array copied"<<std::endl;
   compute_nlin(Fpsik); // the nlin term is stored in NLIN
+  CUDA_CHECK(cudaGetLastError());
   exp_transform(RHS, NLIN.d_complex,  
 		  time, true, Fpsik.N);
 }
@@ -348,7 +352,6 @@ void compute_rhs(cufftDoubleComplex* RHS,
 		 double tt, int N,
 		 int stage)
 {
-
   double Epsilon = h_MP.Epsilon;
   if (Epsilon == 0){
     set_zero_cmplx_array(RHS, N);
