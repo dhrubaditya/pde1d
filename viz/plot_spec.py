@@ -16,7 +16,6 @@ if Q2 is not None:
     datasets = list(range(Q1, Q2 + 1))
 else:
     datasets = [Q1]
-
 for Q in datasets:
     filename = f"data/spec{Q}.dat"
     if not os.path.exists(filename):
