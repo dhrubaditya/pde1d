@@ -71,7 +71,7 @@ int main() {
     std::cout << "Generating initial condition (in device) .." << std::endl;
     if (h_Iparams.FOURIER){
       set_initcond(d_psi, dk, dx, h_Iparams);
-      compute_normalized_spectrum(d_psi, d_Ek);
+      compute_normalized_spectrum(d_Ek, d_psi);
       copy_FFTArray_host_complex(psik, d_psi);
       fft_inverse_inplace(plan, d_psi);
       normalize_fft(d_psi);
@@ -80,7 +80,7 @@ int main() {
       set_initcond(d_psi, dk, dx, h_Iparams);
       copy_FFTArray_host_complex(psi, d_psi);
       fft_forward_inplace(plan, d_psi);
-      compute_normalized_spectrum(d_psi, d_Ek);
+      compute_normalized_spectrum(d_Ek, d_psi);
       copy_FFTArray_host_complex(psik, d_psi);
     }
     CUDA_CHECK(cudaMemcpy(Ek, d_Ek, sizeof(double) * N,

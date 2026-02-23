@@ -46,6 +46,14 @@ __global__ void complex2fft_kernel(cufftDoubleComplex* A,
     }
 }
 //-------------------------//
+// Function to associate complex array to FFT structure
+void AssociateComplex2FFT(FFTArray1D& AFFT, cufftDoubleComplex* d_A, 
+		int N, bool IsF) {
+    AFFT.d_complex = d_A;
+    AFFT.N = N;
+    AFFT.IsFourier = IsF;
+}
+//-------------------------//
 void complex2FFTArray(FFTArray1D& Arr, 
 		      const cufftDoubleComplex* yy, 
 		      int N, bool is_fourier)
@@ -81,7 +89,7 @@ __global__ void copy_array_kernel(cufftDoubleComplex* A,
         B[i].y = A[i].y ; 
     }
 }
-void copy_FFTArray(const FFTArray1D& A, FFTArray1D& B){
+void copy_FFTArray(FFTArray1D& B, const FFTArray1D& A){
   B.N = A.N;
   B.IsFourier = A.IsFourier;
   int block = 256;
@@ -186,9 +194,8 @@ void test_fft_freq(int N)
      }
 }
 //
-__global__ void normalized_spectrum_kernel(const cufftDoubleComplex* data,
-                             double* spectrum,
-                             int N)
+__global__ void normalized_spectrum_kernel(double* spectrum,
+		const cufftDoubleComplex* data, int N)
 {
      int i = blockIdx.x * blockDim.x + threadIdx.x;
      if (i < N) {
@@ -200,14 +207,14 @@ __global__ void normalized_spectrum_kernel(const cufftDoubleComplex* data,
      }
 }
 //
-void compute_normalized_spectrum(const FFTArray1D& arr, double* d_spectrum)
+void compute_normalized_spectrum(double* d_spectrum, const FFTArray1D& arr)
 {
     if(arr.IsFourier){
       int N = arr.N ; 
       int block = 256;
       int grid = (N + block - 1) / block;
-      normalized_spectrum_kernel<<<grid, block>>>(arr.d_complex,
-					       d_spectrum, N);
+      normalized_spectrum_kernel<<<grid, block>>>(d_spectrum, 
+		                         arr.d_complex, N);
     }else{
       clean_exit_host("compute_spectrum works only in fourier space", 0);
     }

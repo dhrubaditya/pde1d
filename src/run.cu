@@ -76,10 +76,10 @@ int main() {
     std::cout << "Generating initial condition (in device) .." << std::endl;
     if (h_Iparams.FOURIER){
       set_initcond(d_psi, dk, dx, h_Iparams);
-      compute_normalized_spectrum(d_psi, d_Ek);
+      compute_normalized_spectrum(d_Ek, d_psi);
       copy_FFTArray_host_complex(psik, d_psi);
     }else{
-      clean_exit_host("e2e: initial condition in real not coded", 0);
+      clean_exit_host("run: initial condition in real not coded", 0);
     }
     CUDA_CHECK(cudaMemcpy(Ek, d_Ek, sizeof(double) * N,
                           cudaMemcpyDeviceToHost));
@@ -116,6 +116,12 @@ int main() {
 	time = time + dt;
       }
       std::cout << "running, time=:\t"<< time << std::endl;
+      std::cout << "computing spectrum and writing to file .." << std::endl;
+      compute_normalized_spectrum(d_Ek, d_psi);
+      CUDA_CHECK(cudaMemcpy(Ek, d_Ek, sizeof(double) * N,
+                          cudaMemcpyDeviceToHost));
+      write_spectrum(Ek, N, dk, iouter+1);
+      std::cout << "..done" << std::endl;
       //compute_diag(d_psi, Diag);
     }
     //write_diag(Diag);

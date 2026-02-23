@@ -48,7 +48,7 @@ void normalize_fft(FFTArray1D& arr);
 
 // Compute the power spectrum |F(k)|^2 of a real-to-complex FFT array
 // d_spectrum should be a device pointer of size N/2 + 1
-void compute_normalized_spectrum(const FFTArray1D& arr, double* d_spectrum);
+void compute_normalized_spectrum(double* d_spectrum, const FFTArray1D& arr);
 // Optional: normalize a spectrum array (|F(k)|^2)
 void normalize_spectrum(double* d_spectrum, int N);
 //-----------------
@@ -65,8 +65,10 @@ void test_fft_freq(int N);
 void set_zero(FFTArray1D& arr);
 void set_zero_cmplx_array(cufftDoubleComplex* A, int N);
 void derivk(FFTArray1D& arr, double hh,  bool abs);
-void copy_FFTArray(const FFTArray1D& A, FFTArray1D& B);
+void copy_FFTArray(FFTArray1D& B, const FFTArray1D& A);
 //void copy_FFTArray_host(double* h_A, FFTArray1D& A);
+void AssociateComplex2FFT(FFTArray1D& AFFT, cufftDoubleComplex* d_A, 
+                int N, bool IsF);
 void copy_FFTArray_host_complex(cufftDoubleComplex* h_arr, FFTArray1D& arr);
 void set_sine_real(double* d_data, double dx, double A, int kpeak, int N);
 void set_cosine_real(double* d_data, double dx, double A, int kpeak, int N);

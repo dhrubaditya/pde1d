@@ -58,7 +58,7 @@ int main() {
     std::cout << "Generating initial condition (in device) .." << std::endl;
     if (h_Iparams.FOURIER){
       set_initcond(d_psi, dk, dx, h_Iparams);
-      compute_normalized_spectrum(d_psi, d_Ek);
+      compute_normalized_spectrum(d_EK, d_psi);
       copy_FFTArray_host_complex(psik, d_psi);
     }else{
       clean_exit_host("e2e: initial condition in real not coded", 0);

@@ -233,7 +233,6 @@ void exp_transform(cufftDoubleComplex* vv,
   int grid = (N + block - 1) / block;
   exp_transform_kernel<<<grid, block>>>(vv, psik, 
 				      time, mult_by_i, N);
-  std::cout << "exp transform work" <<std::endl;
 
 }
 //---------------------
@@ -261,8 +260,14 @@ __global__ void mult_prefactor_rhsv_kernel(cufftDoubleComplex* d_psi4,
   vrhs[i].y = -  dt * rhs.x ; 
 }
 //---------------------
-void compute_nlin(const FFTArray1D& psik){
-  copy_FFTArray(psik, NLIN); // NL = psi(k)
+//DMDM
+void compute_nlin(const cufftDoubleComplex* psik, 
+		const int N, const bool is_fourier){
+  if (mem_allocated == false){
+    clean_exit_host("compute_nlin: NLIN not allocated!", 1);
+  }
+  complex2FFTArray(NLIN, psik, N, is_fourier); // NL = psi(k)
+  //copy_FFTArray(NLIN, psik); // NL = psi(k)
   double beta = h_MP.beta;
   double Epsilon = h_MP.Epsilon;
   if (Epsilon == 0){
@@ -283,13 +288,14 @@ void compute_nlin(const FFTArray1D& psik){
 void compute_rhsv(cufftDoubleComplex* RHS, 
 	 	  const cufftDoubleComplex* d_psik,
 		  double time, int N){
-  FFTArray1D Fpsik;
-  complex2FFTArray(Fpsik, d_psik, N, true);
-  std::cout << "FFT array copied"<<std::endl;
-  compute_nlin(Fpsik); // the nlin term is stored in NLIN
+  //FFTArray1D Fpsik;
+  //complex2FFTArray(Fpsik, d_psik, N, true);
+  //AssociateComplex2FFT(Fpsik, d_psik, N, true);
+  //std::cout << "FFT array associated"<<std::endl;
+  compute_nlin(d_psik, N, true); // the nlin term is stored in NLIN
   CUDA_CHECK(cudaGetLastError());
   exp_transform(RHS, NLIN.d_complex,  
-		  time, true, Fpsik.N);
+		  time, true, N);
 }
 //-------------------
 cufftDoubleComplex sum_nlin_star_psi(const FFTArray1D& psik)
@@ -318,7 +324,7 @@ cufftDoubleComplex test_NN_conservation(FFTArray1D& psik){
     { printf("something is wrong \n");
       clean_exit_host("FFT1DArray NLIN not allocated", 1);
     }
-  compute_nlin(psik);
+  compute_nlin(psik.d_complex, psik.N, psik.IsFourier);
   fft_inverse_inplace(plan, NLIN);
   normalize_fft(NLIN); 
   fft_inverse_inplace(plan, psik);
@@ -334,12 +340,12 @@ void copy_NLIN2host(cufftDoubleComplex* h_nlin, double* h_nlink,
     { printf("copy_NLIN2host: something is wrong \n");
       clean_exit_host("FFT1DArray NLIN not allocated", 1);
     }
-  compute_nlin(d_psi);
+  compute_nlin(d_psi.d_complex, d_psi.N, d_psi.IsFourier);
   copy_FFTArray_host_complex(h_nlin, NLIN);
   int N = d_psi.N;
   double* d_nlink;
   CUDA_CHECK(cudaMalloc(&d_nlink, sizeof(double) * N )  );
-  compute_normalized_spectrum(NLIN, d_nlink);
+  compute_normalized_spectrum(d_nlink, NLIN);
   CUDA_CHECK(cudaMemcpy(h_nlink, d_nlink, sizeof(double) * N ,
                         cudaMemcpyDeviceToHost) );
   cudaFree(d_nlink);
