@@ -137,7 +137,7 @@ void write_spectrum(const double* spectrum, int N, double dk, int Q)
     }
 
     out << std::scientific << std::setprecision(8);
-    for (int i = 0; i < N; i++) {
+    for (int i = 0; i < (N/2 + 1); i++) {
         double k = i * dk;
         out << k << " " << spectrum[i] << "\n";
     }

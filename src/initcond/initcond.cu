@@ -31,6 +31,11 @@ void set_initcond_fourier(FFTArray1D& d_psi, double dk, IParams& IC){
 		      IC.kpeak,
 		      seed, 1);
   }
+  else if (IC.ITYPE == "white") {
+    std::cout << "Implementing white-noise spectrum:" << std::endl;
+    std::cout << "with amplitude = " << IC.A << std::endl;
+    set_white_spectrum(d_psi, IC.A, dk, seed);
+  }
   else if (IC.ITYPE == "zero") {
     set_zero(d_psi);
   }

@@ -61,6 +61,9 @@ void set_peak_spectrum(FFTArray1D& arr,
                                  int kf,
                                  unsigned long seed,
 	                         bool sharp);
+void set_white_spectrum(FFTArray1D& arr,
+                                 double A, double dk,
+                                 unsigned long seed);
 void test_fft_freq(int N);
 void set_zero(FFTArray1D& arr);
 void set_zero_cmplx_array(cufftDoubleComplex* A, int N);

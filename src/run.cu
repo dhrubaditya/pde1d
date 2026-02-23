@@ -62,12 +62,12 @@ int main() {
     // Remember we are arrays that are complex in real space.   
     cufftDoubleReal *Ek;
     CUDA_CHECK(cudaMallocHost((void**)&Ek,
-                              sizeof(double) * N ));
+                              sizeof(double) * (N/2 + 1)  ));
     // device memory
     FFTArray1D d_psi = fft_alloc_1d(N);
     FFTPlan1D plan = fft_plan_create_1d(N);
     double* d_Ek;
-    CUDA_CHECK(cudaMalloc(&d_Ek, sizeof(double) * N) );
+    CUDA_CHECK(cudaMalloc(&d_Ek, sizeof(double) * (N/2 + 1) ) );
 // setup up initial condition (will be responsibility
 // of start.cu later. 
     std::cout << "Reading initial condition input/icond.in .." << std::endl;
@@ -81,7 +81,7 @@ int main() {
     }else{
       clean_exit_host("run: initial condition in real not coded", 0);
     }
-    CUDA_CHECK(cudaMemcpy(Ek, d_Ek, sizeof(double) * N,
+    CUDA_CHECK(cudaMemcpy(Ek, d_Ek, sizeof(double) * (N/2 + 1),
                           cudaMemcpyDeviceToHost));
     std::cout << "Writing intial condition to files .." << std::endl;
     write_complex_array(psik, dk, N, "inicond.out");
@@ -118,7 +118,7 @@ int main() {
       std::cout << "running, time=:\t"<< time << std::endl;
       std::cout << "computing spectrum and writing to file .." << std::endl;
       compute_normalized_spectrum(d_Ek, d_psi);
-      CUDA_CHECK(cudaMemcpy(Ek, d_Ek, sizeof(double) * N,
+      CUDA_CHECK(cudaMemcpy(Ek, d_Ek, sizeof(double) * (N/2 + 1),
                           cudaMemcpyDeviceToHost));
       write_spectrum(Ek, N, dk, iouter+1);
       std::cout << "..done" << std::endl;
