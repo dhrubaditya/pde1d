@@ -218,3 +218,10 @@ __global__ void mult_Astar_B(cufftDoubleComplex* A,
     }
 }
 //---------------------------------------------------------//
+double CumSum(const double* arr, int N) {
+    double sum = 0.0;
+    for (int i = 0; i < N; i++) {
+        sum += arr[i];
+    }
+    return sum;
+}

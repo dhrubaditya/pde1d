@@ -35,3 +35,4 @@ cufftDoubleComplex gpu_Complex_sum(const cufftDoubleComplex *d_in,
 				   GpuComplexReducer &ws);
 __global__ void mult_Astar_B(cufftDoubleComplex* A,
 			     cufftDoubleComplex* B, int N);
+double CumSum(const double* arr, int N);
