@@ -198,7 +198,7 @@ __global__ void normalized_spectrum_kernel(double* spectrum,
 		const cufftDoubleComplex* data, int N)
 {
      int i = blockIdx.x * blockDim.x + threadIdx.x;
-     if (i < N) {
+     if (i < (N/2+1) ) {
        double re = data[i].x;
        double im = data[i].y;
        int ifreq = fft_freq(i, N) ;
@@ -212,7 +212,7 @@ void compute_normalized_spectrum(double* d_spectrum, const FFTArray1D& arr)
     if(arr.IsFourier){
       int N = arr.N ; 
       int block = 256;
-      int grid = (N + block - 1) / block;
+      int grid = (N/2+1 + block - 1) / block;
       normalized_spectrum_kernel<<<grid, block>>>(d_spectrum, 
 		                         arr.d_complex, N);
     }else{
