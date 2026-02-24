@@ -17,3 +17,4 @@ void exp_transform(cufftDoubleComplex* psik,
 cufftDoubleComplex test_NN_conservation(FFTArray1D& psik);
 void copy_NLIN2host(cufftDoubleComplex* h_nlin, double* h_nlink,
                     const FFTArray1D& d_psi);
+void get_green(cufftDoubleComplex* Y, int N);

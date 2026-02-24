@@ -3,7 +3,7 @@
 # ================================
 
 # Compiler and flags
-NVCC       := nvcc -ccbin=/usr/bin/g++-9
+NVCC       := nvcc -ccbin=/usr/bin/g++
 NVCCFLAGS  := -O3  
 
 # Output binary name
@@ -13,7 +13,7 @@ SRC        := fft_utils.cu misc.cu MMT.cu test_MMT.cu
 OBJ        := $(SRC:.cu=.o)
 
 # Header dependency
-DEPS       := model.h fft_utils.h misc.h
+DEPS       := model.h fft_utils.h misc.h 
 
 # CUDA libraries (cuFFT and runtime)
 LIBS       := -lcufft -lcudart -lcurand

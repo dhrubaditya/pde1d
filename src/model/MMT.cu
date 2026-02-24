@@ -126,6 +126,27 @@ __device__ cufftDoubleComplex Green(double kk){
   return G;
 }
 //
+__global__ void get_green_kernel(cufftDoubleComplex* d_data, int N){
+    // write the green's function to a device array
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= (N/2 + 1)) return;
+    if (i == 0) return;
+   //
+   int ik = fft_freq(i, N); 
+   double kk = (double) abs(ik);
+   cufftDoubleComplex G = Green(kk);
+   d_data[i].x = G.x ;
+   d_data[i].y = G.y;
+}
+//-----------------------
+void get_green(cufftDoubleComplex* Y, int N){
+  // compute the linear part and add it to the second array
+  int block = 256;
+  int M = N/2 + 1;
+  int grid = (M + block - 1) / block;
+  get_green_kernel<<<grid, block>>>(Y, N); 
+}
+//
 __global__ void add_lin_kernel(cufftDoubleComplex* Y,
 			        cufftDoubleComplex* data, int N){
     // compute the linear part and add it to the second array
@@ -260,7 +281,6 @@ __global__ void mult_prefactor_rhsv_kernel(cufftDoubleComplex* d_psi4,
   vrhs[i].y = -  dt * rhs.x ; 
 }
 //---------------------
-//DMDM
 void compute_nlin(const cufftDoubleComplex* psik, 
 		const int N, const bool is_fourier){
   if (mem_allocated == false){
