@@ -16,6 +16,7 @@ if Q2 is not None:
     datasets = list(range(Q1, Q2 + 1))
 else:
     datasets = [Q1]
+i=0
 for Q in datasets:
     filename = f"data/spec{Q}.dat"
     if not os.path.exists(filename):
@@ -25,8 +26,7 @@ for Q in datasets:
     data = np.loadtxt(filename)
     k = data[:, 0]
     spectrum = data[:, 1]
-
-    plt.loglog(k, spectrum, '.-', label=f'Spectrum Q={Q}')
+    plt.semilogy(k[1:], spectrum[1:], '.-', label=f'Spectrum Q={Q}')
     any_plotted = True
 
 if not any_plotted:
