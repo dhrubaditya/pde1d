@@ -121,6 +121,7 @@ int main() {
       CUDA_CHECK(cudaMemcpy(Ek, d_Ek, sizeof(double) * (N/2 + 1),
                           cudaMemcpyDeviceToHost));
       write_spectrum(Ek, N, dk, iouter+1);
+      std::cout<< "NN = " << CumSum(Ek, N/2+1) << std::endl;
       std::cout << "..done" << std::endl;
       //compute_diag(d_psi, Diag);
     }
