@@ -4,6 +4,7 @@
 #include <string>
 #include <sstream>
 #include <cstdio>
+#include <iomanip>
 #include "start.h"
 #include "run.h"
 #include "model.h"
@@ -108,6 +109,13 @@ int main() {
     TimeStepDeviceData TStep = TimeStep_allocate_device_memory(N);
     // N because of complex->complex fft 
     //DiagData Diag = setup_diag(N);
+    std::ofstream out("data/diag.dat");
+    if (!out) {
+        std::cerr << "Error: cannot open diag.dat for writing\n";
+        return -1;
+    }
+    out << std::scientific << std::setprecision(8);
+
     double time = 0.;
     std::cout << "starting timestepping, time=:\t"<< time << std::endl;
     for (int iouter = 0; iouter < h_Rparams.NITER/h_Rparams.NAVG; iouter++){
@@ -117,19 +125,18 @@ int main() {
       }
       std::cout << "running, time=:\t"<< time << std::endl;
       std::cout << "computing spectrum and writing to file .." << std::endl;
-      compute_normalized_spectrum(d_Ek, d_psi);
+      calc_diag(d_Ek, d_psi, time, out);
       CUDA_CHECK(cudaMemcpy(Ek, d_Ek, sizeof(double) * (N/2 + 1),
                           cudaMemcpyDeviceToHost));
       write_spectrum(Ek, N, dk, iouter+1);
-      std::cout<< "NN = " << CumSum(Ek, N/2+1) << std::endl;
       std::cout << "..done" << std::endl;
-      //compute_diag(d_psi, Diag);
     }
     //write_diag(Diag);
     //write_data(d_psi);
+    out.close();
 // endsection
 // section : clean up 
-//  First check how memory has been used
+//  First check how much memory has been used
     size_t usedBytes, freeBytes, totalBytes;
     if (getDeviceMemoryUsage(deviceId, &usedBytes, &freeBytes, &totalBytes)
                     == cudaSuccess) {

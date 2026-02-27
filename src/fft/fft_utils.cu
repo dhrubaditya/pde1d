@@ -59,6 +59,7 @@ void complex2FFTArray(FFTArray1D& Arr,
 		      int N, bool is_fourier)
 {
   Arr.N = N;
+  Arr.IsFourier = is_fourier;
   int block = 256;
   int grid = (N + block - 1) / block;
   complex2fft_kernel<<<grid, block>>>(Arr.d_complex, yy, N );
@@ -81,8 +82,9 @@ void B_Adt_FFTArray(FFTArray1D& A, FFTArray1D& B, double dt){
   B_Adt_kernel<<<grid, block>>>(A.d_complex, B.d_complex, A.N, dt);
   
 }
-__global__ void copy_array_kernel(cufftDoubleComplex* A, 
-		                  cufftDoubleComplex* B, int N){
+__global__ void copy_array_kernel(cufftDoubleComplex* B,
+				  const cufftDoubleComplex* A, 
+		                   int N){
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < N ) {
         B[i].x = A[i].x; 
@@ -94,7 +96,7 @@ void copy_FFTArray(FFTArray1D& B, const FFTArray1D& A){
   B.IsFourier = A.IsFourier;
   int block = 256;
   int grid = (A.N + 2 + block - 1) / block;
-  copy_array_kernel<<<grid, block>>>(A.d_complex, B.d_complex, A.N );
+  copy_array_kernel<<<grid, block>>>(B.d_complex, A.d_complex, A.N );
 }
 //
 __global__ void abs2_times_z_kernel(cufftDoubleComplex* A, int N){

@@ -1,5 +1,9 @@
 #include <iostream>
 #include <fstream>
+#include <sstream>
+#include <string>
+#include <vector>
+#include <cstdio>
 #include <iomanip>
 #include <complex>
 #include <sys/stat.h> 
@@ -28,6 +32,8 @@ struct MParams {
 bool mem_allocated;
 FFTPlan1D plan;
 FFTArray1D NLIN;
+FFTArray1D d_psir; //extra array to keep real space psi in device
+// for diagnostics.
 FFTArray1D GradAlphaPsik;
 double* d_Hr;
 MParams h_MP;
@@ -90,6 +96,9 @@ void setup_model(int N){
   copy_params_to_device(h_MP);
   // allocate necessary device memory
   NLIN = fft_alloc_1d(N);
+  NLIN.IsFourier = true;
+  d_psir = fft_alloc_1d(N);
+  d_psir.IsFourier=false;
   GradAlphaPsik = fft_alloc_1d(N);
   plan = fft_plan_create_1d(N);
   size_t bytes = sizeof(double) * N;
@@ -102,6 +111,7 @@ void model_free_device_memory()
 {
   if(mem_allocated){
     fft_free_1d(NLIN);
+    fft_free_1d(d_psir);
     fft_free_1d(GradAlphaPsik);
     cudaFree(d_Hr);
     mem_allocated = false;
@@ -172,9 +182,10 @@ void add_lin(FFTArray1D& Y, FFTArray1D& RHS){
 // ------------------------------------------------------
 // Hamiltonian
 // ------------------------------------------------------
-__global__ void compute_Hr_kernel(cufftDoubleComplex* DelAlphaby2psi, 
+__global__ void compute_Hr_kernel(double* d_Hamil,
+				  cufftDoubleComplex* DelAlphaby2psi, 
 		                  cufftDoubleComplex* psi4,
-				  double* d_Hamil, int N){
+				   int N){
   int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i > N) return;
   double Omega0 = d_MP.Omega0;
@@ -193,23 +204,22 @@ void compute_Hr(FFTArray1D& GradAlphaby2psi, FFTArray1D& psi4){
     int N = GradAlphaby2psi.N;
     int block = 256;
     int grid = (N + block - 1) / block;
-    compute_Hr_kernel<<<grid, block>>>(GradAlphaby2psi.d_complex,
-				     psi4.d_complex, d_Hr, N);
+    compute_Hr_kernel<<<grid, block>>>(d_Hr, GradAlphaby2psi.d_complex,
+				     psi4.d_complex, N);
   }else{
     clean_exit_host("compute_Hr: should be in real space", 1);
   } 
 }
 //
-double Hamiltonian(FFTPlan1D& plan, FFTArray1D& psik){
+double Hamiltonian(FFTArray1D& psik){
   int N = psik.N;
   double alpha = h_MP.alpha;
   double beta = h_MP.beta;
-  copy_FFTArray(psik, NLIN); // psi(k)
+  copy_FFTArray(NLIN, psik); // psi(k)
   derivk(NLIN, -beta/4,  true); //|k|^{-\beta/4}psi(k)
   fft_inverse_inplace(plan, NLIN);
   normalize_fft(NLIN); //F^{-1}[|k|^{-\beta/4}psi]
-  
-  copy_FFTArray(psik, GradAlphaPsik); // psi(k)
+  copy_FFTArray(GradAlphaPsik, psik); // psi(k)
   derivk(GradAlphaPsik, alpha/2,  true); //|k|^{\alpha/2}psi(k)
   fft_inverse_inplace(plan, GradAlphaPsik);
   normalize_fft(GradAlphaPsik); //F^{-1}[|k|^{\alpha/2}psi]
@@ -287,7 +297,6 @@ void compute_nlin(const cufftDoubleComplex* psik,
     clean_exit_host("compute_nlin: NLIN not allocated!", 1);
   }
   complex2FFTArray(NLIN, psik, N, is_fourier); // NL = psi(k)
-  //copy_FFTArray(NLIN, psik); // NL = psi(k)
   double beta = h_MP.beta;
   double Epsilon = h_MP.Epsilon;
   if (Epsilon == 0){
@@ -339,17 +348,18 @@ cufftDoubleComplex sum_nlin_star_psi(const FFTArray1D& psik)
     return sum;
 }
 //-----------------
-cufftDoubleComplex test_NN_conservation(FFTArray1D& psik){
+cufftDoubleComplex test_NN_conservation(const FFTArray1D& psik){
   if (NLIN.d_complex == nullptr)
     { printf("something is wrong \n");
       clean_exit_host("FFT1DArray NLIN not allocated", 1);
     }
   compute_nlin(psik.d_complex, psik.N, psik.IsFourier);
   fft_inverse_inplace(plan, NLIN);
-  normalize_fft(NLIN); 
-  fft_inverse_inplace(plan, psik);
-  normalize_fft(psik); 
-  cufftDoubleComplex Z = sum_nlin_star_psi(psik);
+  normalize_fft(NLIN);
+  copy_FFTArray(d_psir, psik);
+  fft_inverse_inplace(plan, d_psir); 
+  normalize_fft(d_psir); 
+  cufftDoubleComplex Z = sum_nlin_star_psi(d_psir);
   return Z;
 }
 //---------------------------
@@ -369,6 +379,17 @@ void copy_NLIN2host(cufftDoubleComplex* h_nlin, double* h_nlink,
   CUDA_CHECK(cudaMemcpy(h_nlink, d_nlink, sizeof(double) * N ,
                         cudaMemcpyDeviceToHost) );
   cudaFree(d_nlink);
+}
+// ------------------------------------------------------
+// Diagnostic
+// ------------------------------------------------------
+void calc_diag(double* d_NNk, const FFTArray1D& d_psik,
+	       double time, std::ofstream& diagf){
+  int N = d_psik.N;
+  compute_normalized_spectrum(d_NNk, d_psik);
+  double NN = gpu_sum(d_NNk, N, red);
+  cufftDoubleComplex Z =  test_NN_conservation(d_psik);
+  diagf << time << "\t" << NN << "\t" << Z.x <<"\t" << Z.y <<"\n";
 }
 // ------------------------------------------------------
 // Compute RHS 

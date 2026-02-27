@@ -152,7 +152,7 @@ void free_reducer(GpuReducer &red) {
     red.h_partial = nullptr;
 }
 //
-__global__ void reduce_sum(const double *d_Arr, double *d_out, size_t N) {
+__global__ void reduce_sum(double *d_out, const double *d_Arr, size_t N) {
     extern __shared__ double sdatar[];  // shared memory for partial sums
 
     unsigned int tid  = threadIdx.x;
@@ -181,7 +181,7 @@ double gpu_sum(const double* d_Arr, size_t N, GpuReducer &red) {
     const int BLOCK_SIZE = 256;
     int gridSize = (N + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-    reduce_sum<<<gridSize, BLOCK_SIZE, BLOCK_SIZE * sizeof(double)>>>(d_Arr, red.d_partial, N);
+    reduce_sum<<<gridSize, BLOCK_SIZE, BLOCK_SIZE * sizeof(double)>>>(red.d_partial, d_Arr, N);
 
     size_t n = gridSize;
     while (n > 1) {

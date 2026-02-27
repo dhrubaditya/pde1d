@@ -18,3 +18,5 @@ cufftDoubleComplex test_NN_conservation(FFTArray1D& psik);
 void copy_NLIN2host(cufftDoubleComplex* h_nlin, double* h_nlink,
                     const FFTArray1D& d_psi);
 void get_green(cufftDoubleComplex* Y, int N);
+void calc_diag(double* d_NNk, const FFTArray1D& d_psik,
+	       double time, std::ofstream& diagf);
