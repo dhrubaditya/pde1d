@@ -44,6 +44,18 @@ __global__ void rk4_update_kernel(cufftDoubleComplex* Y,
         Y[i].y += (k1[i].y + 2.0 * k2[i].y + 2.0 * k3[i].y + k4[i].y) / 6.0;
     }
 }
+// Euler update: Y <- Y + k1
+__global__ void euler_update_kernel(cufftDoubleComplex* Y,
+                                  const cufftDoubleComplex* k1,
+				  const double dt,
+                                  int N)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < N) {
+        Y[i].x += dt*k1[i].x ;
+        Y[i].y += dt*k1[i].y ;
+    }
+}
 // ---------------- host functions ----------------
 TimeStepDeviceData TimeStep_allocate_device_memory(int N)
 {
@@ -72,9 +84,8 @@ void TimeStep_free_device_memory(TimeStepDeviceData& dev)
     dev.d_Y = dev.d_Ytemp = dev.d_k1 = dev.d_k2 = dev.d_k3 = dev.d_k4 = nullptr;
     dev.is_initialized = false;
 }
-
 //-----------------------------------//
-void ExpScheme(cufftDoubleComplex* d_psi, int N,  double dt, 
+void ExpRK4(cufftDoubleComplex* d_psi, int N,  double dt, 
 		       TimeStepDeviceData& dev)
 {
     if (N <= 0) return;
@@ -128,5 +139,31 @@ void ExpScheme(cufftDoubleComplex* d_psi, int N,  double dt,
     exp_transform(d_psi, dev.d_Y, -dt, false, N); //actually inverse transform
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
-    
+ }
+//--------------------------------------------------//
+//-----------------------------------//
+void ExpEuler(cufftDoubleComplex* d_psi, int N,  double dt, 
+		       TimeStepDeviceData& dev)
+{
+    const int threads = BLOCK_SIZE;
+    const int blocks  = (N + threads - 1) / threads;
+    double tt = 0;
+    // First transform variable
+    // Y = exp(-G*tt)\psi
+    exp_transform(dev.d_Y, d_psi, tt, false, N);
+    // d_k1 = exp(-G*tt)*NLIN(psi)
+    compute_rhs(dev.d_k1, d_psi, tt, N, 1);
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());     
+    // Final update Y <- Y + d_k1*dt
+    euler_update_kernel<<<blocks, threads>>>(dev.d_Y, dev.d_k1, dt, N);
+    exp_transform(d_psi, dev.d_Y,-(tt+dt), false, N); //actually inverse transform
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
+ }
+//------------------------------------------//
+void ExpScheme(cufftDoubleComplex* d_psi, int N,  double dt, 
+	       TimeStepDeviceData& dev){
+  //ExpRK4(d_psi, N, dt, dev);
+  ExpEuler(d_psi, N, dt, dev);
 }
