@@ -36,12 +36,13 @@ __global__ void rk4_update_kernel(cufftDoubleComplex* Y,
                                   const cufftDoubleComplex* k2,
                                   const cufftDoubleComplex* k3,
                                   const cufftDoubleComplex* k4,
+				  double dt,
                                   int N)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < N) {
-        Y[i].x += (k1[i].x + 2.0 * k2[i].x + 2.0 * k3[i].x + k4[i].x) / 6.0;
-        Y[i].y += (k1[i].y + 2.0 * k2[i].y + 2.0 * k3[i].y + k4[i].y) / 6.0;
+        Y[i].x += dt * (k1[i].x + 2.0 * k2[i].x + 2.0 * k3[i].x + k4[i].x) / 6.0;
+        Y[i].y += dt * (k1[i].y + 2.0 * k2[i].y + 2.0 * k3[i].y + k4[i].y) / 6.0;
     }
 }
 // Euler update: Y <- Y + k1
@@ -90,89 +91,51 @@ void ExpRK4(cufftDoubleComplex* d_psi, int N,  double dt,
 {
     const int threads = BLOCK_SIZE;
     const int blocks  = (N + threads - 1) / threads;
-     tt = 0
-    // First transform variable
+    //---------- step one ----------------//
+    double tt = 0;
     // Y = exp(-G*tt)\psi
     exp_transform(dev.d_Y, d_psi, tt, false, N);
-    // 1st evaluation of RHS: k1 = f(Y) -> dev.d_k1
+    // k1 = f(Y) -> dev.d_k1
     // d_k1 = exp(-G*tt)*NLIN(psi)
     compute_rhs(dev.d_k1, d_psi, tt, N, 1);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
-    // take 1st step:
-    //Ytemp = Y + 0.5*dt*k1 ; tt = tt + dt/2;
-    // psi(tt+dt/2) = Ytemp*exp(G* (tt+dt/2) )
+    //---------- step two ----------------//
+    tt = dt/2;
+    //Ytemp = Y + 0.5*dt*k1 ; 
     combine_stage_kernel<<<blocks, threads>>>(dev.d_Ytemp, dev.d_Y,
 					      dev.d_k1, 0.5*dt, N );
     CUDA_CHECK(cudaDeviceSynchronize());
-    tt = dt/2.;
+    // psi(dt/2) = Ytemp*exp(G* (dt/2) )
     exp_transform(d_psi, dev.d_Ytemp, -tt, false, N); //actually inverse transform
-    // 2nd evaluation of RHS: k2 = f(Ytemp) -> dev.d_k2
+    // k2 = f(Ytemp) -> dev.d_k2
     // d_k2 = exp(-G*tt)*NLIN(psi)
     compute_rhs(dev.d_k2, d_psi, tt, N, 2);
-    //take 2nd step:
-    //Ytemp = Y + 0.5*dt*k2 ; tt = dt/2;
-    // psi(dt/2) = Ytemp*exp(G* (dt/2) )
+    //--------------step three ----------------//
+    tt = dt/2;
+    //Ytemp = Y + 0.5*dt*k2 ;   
     combine_stage_kernel<<<blocks, threads>>>(dev.d_Ytemp, dev.d_Y,
 					      dev.d_k2, 0.5*dt, N );
     CUDA_CHECK(cudaDeviceSynchronize());
-    tt = dt/2.;
     exp_transform(d_psi, dev.d_Ytemp, -tt, false, N); //actually inverse transform
-    // 3rd evaluation of RHS: k3 = f(Ytemp) -> dev.d_k3
     // d_k3 = exp(-G*tt)*NLIN(psi)
-    tt = dt/2
-    compute_rhs(dev.d_k2, d_psi, tt, N, 3);
-    //take 3rd step:
-    //Ytemp = Y + dt*k3 ; tt = dt;
-    // psi(dt) = Ytemp*exp(G* dt )
+    compute_rhs(dev.d_k3, d_psi, tt, N, 3);
+    //--------------step four ----------------//
     tt = dt;
+    //Ytemp = Y + dt*k3 ; tt = dt;
     combine_stage_kernel<<<blocks, threads>>>(dev.d_Ytemp, dev.d_Y,
 					      dev.d_k3, dt, N );
     CUDA_CHECK(cudaDeviceSynchronize());
-    tt = dt;
     exp_transform(d_psi, dev.d_Ytemp, -tt, false, N); //actually inverse transform
-
-
-
-    
-    // Stage 2: Ytemp = Y + 0.5*k1 ; k2 = dt * f(Ytemp)
-    combine_stage_kernel<<<blocks, threads>>>(dev.d_Ytemp,
-					      dev.d_Y, dev.d_k1, 0.5, N );
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
-    tt = dt/2.;
-    exp_transform(d_psi, dev.d_Ytemp, -tt, false, N); //actually inverse transform
-    compute_rhs(dev.d_k2, d_psi, tt, N, 2);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
-    
-    // Stage 3: Ytemp = Y + 0.5*k2 ; k3 = dt * f(Ytemp)
-    combine_stage_kernel<<<blocks, threads>>>(dev.d_Ytemp,
-					      dev.d_Y, dev.d_k2, 0.5, N );
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
-    tt = dt/2.;
-    exp_transform(d_psi, dev.d_Ytemp, -tt, false, N); //actually inverse transform
-    compute_rhs(dev.d_k3, d_psi, tt, N, 3);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
-    
-    // Stage 4: Ytemp = Y + k3 ; k4 = dt * f(Ytemp)
-    combine_stage_kernel<<<blocks, threads>>>(dev.d_Ytemp,
-					      dev.d_Y, dev.d_k3, 1.0, N);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
-    tt = dt;
-    exp_transform(d_psi, dev.d_Ytemp, -tt, false, N); //actually inverse transform
+    // d_k4 = exp(-G*tt)*NLIN(psi)
     compute_rhs(dev.d_k4, d_psi, tt, N, 4);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
-      
-    // Final update Y <- Y + (k1 + 2*k2 + 2*k3 + k4) / 6
-    rk4_update_kernel<<<blocks, threads>>>(dev.d_Y,
-					   dev.d_k1, dev.d_k2,
-					   dev.d_k3, dev.d_k4, N);
-    exp_transform(d_psi, dev.d_Y, -dt, false, N); //actually inverse transform
+    // ----------- Final Update ----------------//
+    tt = dt;
+    // Final update Y <- Y + (k1 + 2*k2 + 2*k3 + k4) * dt/ 6
+    rk4_update_kernel<<<blocks, threads>>>(dev.d_Y, dev.d_k1,
+					   dev.d_k2, dev.d_k3,
+					   dev.d_k4, dt, N);
+    exp_transform(d_psi, dev.d_Y, -tt, false, N); //actually inverse transform
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
  }
