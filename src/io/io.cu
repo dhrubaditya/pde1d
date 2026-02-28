@@ -4,6 +4,13 @@
 #include <complex>
 #include <sys/stat.h> 
 #include <cufft.h>      
+#include <sstream>
+#include <string>
+#include <unordered_map>
+#include <functional>
+#include <stdexcept>
+#include <algorithm>
+#include <cctype>
 #include "io.h"
 #include "misc.h"
 //-----------
@@ -22,6 +29,20 @@ static inline std::string trim(const std::string& s) {
     size_t end = s.find_last_not_of(" \t");
     if (start == std::string::npos) return "";
     return s.substr(start, end - start + 1);
+}
+//----------------------------------//
+static bool str_to_bool(const std::string& token)
+{
+    std::string t = token;
+    std::transform(t.begin(), t.end(), t.begin(),
+                   [](unsigned char c){ return std::tolower(c); });
+
+    if (t == "1" || t == "true" || t == "yes" || t == "on")
+        return true;
+    if (t == "0" || t == "false" || t == "no" || t == "off")
+        return false;
+
+    throw std::invalid_argument("cannot convert \"" + token + "\" to bool");
 }
 //----------------------------------//
 SParams read_Sparams(const char* filename) {
@@ -53,7 +74,6 @@ SParams read_Sparams(const char* filename) {
 }
 //-------------------------------------------------
 RParams read_Rparams(const char* filename) {
-    RParams p = {};  // zero-initialize
 
     std::ifstream file(filename);
     if (!file.is_open()) {
@@ -61,21 +81,49 @@ RParams read_Rparams(const char* filename) {
 		  << filename << std::endl;
         exit(EXIT_FAILURE);
     }
-    std::string line;
+    RParams p = {};  // zero-initialize
+
+	// Helper map: key → lambda that sets the appropriate field.
+    // Each lambda receives the raw value string (already trimmed).
+    const std::unordered_map<std::string,
+        std::function<void(const std::string&)>> setters = {
+        {"run",      [&](const std::string& v){ p.run      = str_to_bool(v); }},
+        {"FOURIER",  [&](const std::string& v){ p.FOURIER  = str_to_bool(v); }},
+        {"NITER",    [&](const std::string& v){ p.NITER    = std::stoi(v); }},
+        {"NAVG",     [&](const std::string& v){ p.NAVG     = std::stoi(v); }},
+        {"dt",       [&](const std::string& v){ p.dt       = std::stod(v); }},
+        {"ALGO",     [&](const std::string& v){ p.ALGO     = v;         }}
+    };
+ 
+	std::string line;
     while (std::getline(file, line)) {
-        std::istringstream iss(line);
-        std::string key, eq;
-        double value;
+        std::string tline = trim(line);
+        if (tline.empty() || tline[0] == '#' || (tline.size() >= 2 && tline[0]=='/' && tline[1]=='/'))
+            continue;                       // skip comments / blanks
 
-        // Expected format: key = value
-        if (!(iss >> key >> eq >> value)) continue; // skip malformed lines
+        // Split at the first '=' character
+        auto eqPos = tline.find('=');
+        if (eqPos == std::string::npos) {
+            std::cerr << "Warning: line without '=' ignored: " << line << '\n';
+            continue;
+        }
 
-        if (key == "run") p.run = value;
-	else if (key == "FOURIER") p.FOURIER = value;
-	else if (key == "NITER") p.NITER = value;
-	else if (key == "NAVG") p.NAVG = value;
-	else if (key == "dt") p.dt = value;
-    }    
+        std::string key   = trim(line.substr(0, eqPos));
+        std::string value = trim(line.substr(eqPos + 1));
+
+		auto it = setters.find(key);
+        if (it != setters.end()) {
+            try {
+                it->second(value);   // invoke the appropriate parser
+            } catch (const std::exception& e) {
+                std::cerr << "Error parsing value for '" << key
+                          << "': " << e.what() << '\n';
+            }
+        } else {
+            std::cerr << "Warning: unknown key '" << key << "' ignored.\n";
+        }
+    }
+//
     file.close();
     p.TMAX = p.dt * (double) p.NITER;
     return p;

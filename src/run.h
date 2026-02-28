@@ -11,6 +11,7 @@ struct RParams {
   int NAVG;
   double dt;
   double TMAX;
+  std::string ALGO = "euler";
 };
 
 

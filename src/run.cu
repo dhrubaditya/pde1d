@@ -106,7 +106,7 @@ int main() {
  // section 3 : Model
     setup_model(N);
  //  section 4 : timestepping
-    TimeStepDeviceData TStep = TimeStep_allocate_device_memory(N);
+    TimeStepDeviceData TStep = setup_timestep(N,h_Rparams.ALGO);
     // N because of complex->complex fft 
     //DiagData Diag = setup_diag(N);
     std::ofstream out("data/diag.dat");
@@ -117,11 +117,12 @@ int main() {
     out << std::scientific << std::setprecision(8);
 
     double time = 0.;
+	std::cout << "============================================="<<std::endl;
     std::cout << "starting timestepping, time=:\t"<< time << std::endl;
     for (int iouter = 0; iouter < h_Rparams.NITER/h_Rparams.NAVG; iouter++){
       for(int iinner = 0; iinner < h_Rparams.NAVG; iinner++){
-	ExpScheme(d_psi.d_complex, N, dt, TStep);
-	time = time + dt;
+		ExpScheme(d_psi.d_complex, N, dt, TStep);
+		time = time + dt;
       }
       std::cout << "running, time=:\t"<< time << std::endl;
       std::cout << "computing spectrum and writing to file .." << std::endl;
@@ -134,6 +135,7 @@ int main() {
     //write_diag(Diag);
     //write_data(d_psi);
     out.close();
+	std::cout << "============================================="<<std::endl;
 // endsection
 // section : clean up 
 //  First check how much memory has been used

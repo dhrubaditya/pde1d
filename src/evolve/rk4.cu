@@ -1,5 +1,9 @@
 // rk4.cu
 #include <cstdio>
+#include <iostream>
+#include <unordered_map>
+#include <functional>
+#include <string>
 #include "evolve.h"
 #include "model.h"   // declaration of rhs_kernel 
 
@@ -58,17 +62,20 @@ __global__ void euler_update_kernel(cufftDoubleComplex* Y,
     }
 }
 // ---------------- host functions ----------------
-TimeStepDeviceData TimeStep_allocate_device_memory(int N)
+TimeStepDeviceData setup_timestep(int N, const std::string& algo)
 {
     TimeStepDeviceData dev;
     dev.is_initialized = false;
-
+	dev.algo = algo;
+    std::cout<< "setup for timestepping: algorithm="<< dev.algo<<std::endl;
+    std::cout<< "Allocating device memory.."<< std::endl;
     CUDA_CHECK(cudaMalloc(&dev.d_Y, N * sizeof(cufftDoubleComplex) ));
     CUDA_CHECK(cudaMalloc(&dev.d_Ytemp, N * sizeof(cufftDoubleComplex) ));
     CUDA_CHECK(cudaMalloc(&dev.d_k1,    N * sizeof(cufftDoubleComplex) ));
     CUDA_CHECK(cudaMalloc(&dev.d_k2,    N * sizeof(cufftDoubleComplex) ));
     CUDA_CHECK(cudaMalloc(&dev.d_k3,    N * sizeof(cufftDoubleComplex) ));
     CUDA_CHECK(cudaMalloc(&dev.d_k4,    N * sizeof(cufftDoubleComplex) ));
+    std::cout<< "..done"<< std::endl;
 
     return dev;
 }
@@ -181,18 +188,41 @@ void ExpEuler(cufftDoubleComplex* d_psi, int N,  double dt,
     // step one
     // d_k1 = exp(-G*tt)*NLIN(psi)
     compute_rhs(dev.d_k1, d_psi, tt, N, 1);
-    CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());     
     // Final update Y <- Y + d_k1*dt
     euler_update_kernel<<<blocks, threads>>>(dev.d_Y, dev.d_k1, dt, N);
     exp_transform(d_psi, dev.d_Y,-dt, false, N); //actually inverse transform
-    CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
  }
 //------------------------------------------//
-void ExpScheme(cufftDoubleComplex* d_psi, int N,  double dt, 
-	       TimeStepDeviceData& dev){
+void ExpScheme(cufftDoubleComplex* d_psi, 
+				int N,  double dt,
+	       		TimeStepDeviceData& dev){
+
+	// ------------------------------------------------------------------
+    // Build a *static* lookup table once.  The map is immutable after
+    // construction, so it is safe to share across calls and threads.
+    // ------------------------------------------------------------------
+    static const std::unordered_map<std::string,
+                           std::function<void()>> integratorMap = {
+        { "euler",
+          [&](){ ExpEuler(d_psi, N, dt, dev); } },
+
+        { "rk2",
+          [&](){ ExpRK2(d_psi, N, dt, dev); } },
+
+        { "rk4",
+          [&](){ ExpRK4(d_psi, N, dt, dev); } }
+    };
+    // Look up the algorithm
+	auto it = integratorMap.find(dev.algo);
+    if (it != integratorMap.end()){
+        it->second(); // call the matched function
+	} else{
+        std::cerr << "Unknown algorithm: " << dev.algo << "\n";
+	}
    //ExpEuler(d_psi, N, dt, dev);
    //ExpRK2(d_psi, N, dt, dev);
-   ExpRK4(d_psi, N, dt, dev);
+   //ExpRK4(d_psi, N, dt, dev);
+	return;
 }

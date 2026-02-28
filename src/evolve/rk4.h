@@ -21,13 +21,14 @@ struct TimeStepDeviceData {
 
     // Host-side flag: 
     bool is_initialized = false;
+	std::string algo;
 };
 
 // ---------------------------------------------------------------------
 // Allocate all device memory needed for RK4
 //   N : size of the system (length of Y)
 // ---------------------------------------------------------------------
-TimeStepDeviceData TimeStep_allocate_device_memory(int N);
+TimeStepDeviceData setup_timestep(int N, const std::string& algo);
 // ---------------------------------------------------------------------
 // Free all previously allocated device memory
 // ---------------------------------------------------------------------
