@@ -1,7 +1,9 @@
 # ==========================
 # CUDA PDE Project Makefile
 # ==========================
-
+# Disable built-in implicit rules
+.SUFFIXES:
+MAKEFLAGS += --no-builtin-rules
 # CUDA compiler and host compiler
 NVCC      := nvcc
 CXX       := g++ 
@@ -11,15 +13,17 @@ NVCCFLAGS := -ccbin=$(CXX) -O3 -dc
 LDFLAGS   := -lcufft -lcurand -lcudart
 
 # Executable name
-RUN    := pde1d.x
+RUN    := run.x
 START  := start.x
 E2E  := e2e.x
 
 # Source and object files for START
-SRC_START = start.cu initcond.cu misc.cu fft_utils.cu
+SRC_START = start.cu initcond.cu misc.cu fft_utils.cu io.cu gpu_helper.cu
 OBJ_START = $(SRC_START:.cu=.o)
 SRC_E2E = end2end.cu initcond.cu misc.cu fft_utils.cu model.cu io.cu 
 OBJ_E2E = $(SRC_E2E:.cu=.o)
+SRC_RUN = run.cu initcond.cu misc.cu fft_utils.cu model.cu io.cu evolve.cu gpu_helper.cu
+OBJ_RUN = $(SRC_RUN:.cu=.o)
 
 # Default rule
 start: $(START)
@@ -38,13 +42,16 @@ $(START): $(OBJ_START)
 $(E2E): $(OBJ_E2E)
 	@echo "Linking objects -> $(E2E)"
 	$(NVCC) -ccbin=$(CXX) $(OBJ_E2E) -o $@ $(LDFLAGS)
+$(RUN): $(OBJ_RUN)
+	@echo "Linking objects -> $(RUN)"
+	$(NVCC) -ccbin=$(CXX) $(OBJ_RUN) -o $@ $(LDFLAGS)
 
 # Cleanup rules
 clean:
 	rm -f *.o *.ptx *.linkinfo
 
 distclean: clean
-	rm -f $(TARGET)
+	rm -f start.x run.x e2e.x 
 
 # Show configuration info
 info:
@@ -54,9 +61,8 @@ info:
 	@echo "ARCH       = $(ARCH)"
 	@echo "NVCCFLAGS  = $(NVCCFLAGS)"
 	@echo "LDFLAGS    = $(LDFLAGS)"
-	@echo "SRC        = $(SRC)"
-	@echo "OBJ        = $(OBJ)"
-	@echo "TARGET     = $(TARGET)"
+	@echo "SRC        = $(SRC_RUN)"
+	@echo "OBJ        = $(OBJ_RUN)"
 	@echo "------------------------------------------------"
 
 .PHONY: all clean distclean info
