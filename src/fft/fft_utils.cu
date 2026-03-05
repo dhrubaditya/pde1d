@@ -167,8 +167,8 @@ void fft_inverse_inplace(const FFTPlan1D& plan, FFTArray1D& arr) {
 __global__ void normalize_fft_kernel(cufftDoubleComplex* data, int N) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < N) {
-        data[i].x /= N;  // scale inverse FFT
-        data[i].y /= N;  // scale inverse FFT
+      data[i].x /= (double) N;  // scale inverse FFT
+      data[i].y /= (double) N;  // scale inverse FFT
     }
 }
 //
@@ -205,7 +205,7 @@ __global__ void normalized_spectrum_kernel(double* spectrum,
        double im = data[i].y;
        int ifreq = fft_freq(i, N) ;
        int ik = abs(ifreq);
-       spectrum[ik] = (re * re + im * im ) / (N * N) ;  // |F(k)|²
+       spectrum[ik] = (re * re + im * im ) / ((double)N *(double)N) ;  // |F(k)|²
      }
 }
 //
@@ -352,7 +352,7 @@ __global__ void peak_spectrum_kernel(cufftDoubleComplex* data,
    if (sharp){
      if(ik == kf){
         re = A / sqrt(2.) ;
-	im = A / sqrt(2.) ;
+	    im = A / sqrt(2.) ;
         data[i].x = re;
         data[i].y = im;	
      }
@@ -386,6 +386,60 @@ void set_peak_spectrum(FFTArray1D& arr,
       peak_spectrum_kernel<<<grid, block>>>(arr.d_complex,
                                           arr.N,
                                           A, dk, kf, seed, sharp);
+      cudaDeviceSynchronize();
+    }else{
+      clean_exit_host("set_peak_spectrum works only in fourier space", 0);
+    }
+}
+// ---------------------
+// Kernel to set k^2exp(-k/kf) as spectrum
+__global__ void ksqr_exp_k_spectrum_kernel(cufftDoubleComplex* data,
+		                    int N,
+                                    double A, double dk,
+                                    int kf,
+                                    unsigned long seed)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= N) return;
+    int ifreq = fft_freq(i, N) ;
+    int ik = abs(ifreq);
+    double re = 0.0;
+    double im = 0.0;
+
+   // 
+   curandStatePhilox4_32_10_t state;
+   curand_init(seed + i, 0, 0, &state); 
+
+   // Generate uniform random phase [0, 2pi)
+   double phi = curand_uniform_double(&state) * 2.0 * M_PI;
+
+  // Amplitude such that |F(k)|^2 = A (k^2) exp(-k/kf) 
+   double KF = (double) kf;
+   double KK = (double) ik;
+   double amplitude = KK*KK*exp(-KK/KF);
+
+   re = amplitude * cos(phi);
+   im = amplitude * sin(phi);
+
+   data[i].x = re;
+   data[i].y = im;
+   if ( i == 0 ) {
+     data[i].x = 0.;
+     data[i].y = 0.;
+   }
+}
+//--------------------------------
+void set_ksqr_exp_k_spectrum(FFTArray1D& arr,
+			     double A, double dk, int kf, 
+			     unsigned long seed = 1234)
+{ 
+    if (arr.IsFourier){
+      int block = 256;
+      int grid = (arr.N + block - 1) / block;
+
+      ksqr_exp_k_spectrum_kernel<<<grid, block>>>(arr.d_complex, arr.N,
+					      A, dk, kf,
+					      seed);
       cudaDeviceSynchronize();
     }else{
       clean_exit_host("set_peak_spectrum works only in fourier space", 0);

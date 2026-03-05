@@ -36,6 +36,12 @@ void set_initcond_fourier(FFTArray1D& d_psi, double dk, IParams& IC){
     std::cout << "with amplitude = " << IC.A << std::endl;
     set_white_spectrum(d_psi, IC.A, dk, seed);
   }
+  else if (IC.ITYPE == "ksqr_exp_k") {
+    std::cout << "Implementing (k^2)exp(-k/kf):" << std::endl;
+    std::cout << "with amplitude = " << IC.A << std::endl;
+    std::cout << "kf = " << IC.kpeak << std::endl;
+    set_ksqr_exp_k_spectrum(d_psi, IC.A, dk, IC.kpeak, seed); 
+  }
   else if (IC.ITYPE == "zero") {
     set_zero(d_psi);
   }
