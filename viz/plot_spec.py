@@ -26,7 +26,7 @@ for Q in datasets:
     data = np.loadtxt(filename)
     k = data[:, 0]
     spectrum = data[:, 1]
-    plt.semilogy(k[1:], spectrum[1:], '.-', label=f'Spectrum Q={Q}')
+    plt.semilogy(k[1:], spectrum[1:], label=f'Spectrum Q={Q}')
     any_plotted = True
 
 if not any_plotted:
