@@ -34,7 +34,8 @@ void set_initcond_fourier(FFTArray1D& d_psi, double dk, IParams& IC){
   else if (IC.ITYPE == "white") {
     std::cout << "Implementing white-noise spectrum:" << std::endl;
     std::cout << "with amplitude = " << IC.A << std::endl;
-    set_white_spectrum(d_psi, IC.A, dk, seed);
+    std::cout << "cutoff = " << IC.kpeak << std::endl;
+    set_white_spectrum(d_psi, IC.A, dk, IC.kpeak,seed);
   }
   else if (IC.ITYPE == "ksqr_exp_k") {
     std::cout << "Implementing (k^2)exp(-k/kf):" << std::endl;

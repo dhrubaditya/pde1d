@@ -67,6 +67,7 @@ void set_ksqr_exp_k_spectrum(FFTArray1D& arr,
                                  unsigned long seed);
 void set_white_spectrum(FFTArray1D& arr,
                                  double A, double dk,
+			         int kcut,
                                  unsigned long seed);
 void test_fft_freq(int N);
 void set_zero(FFTArray1D& arr);

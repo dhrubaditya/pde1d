@@ -282,6 +282,7 @@ void set_power_law_spectrum(FFTArray1D& arr,
 // Kernel to set white-noise spectrum using Mersenne Twister RNG
 __global__ void white_spectrum_kernel(cufftDoubleComplex* data,
 		                    int N, double A, double dk,
+				      int kcut,
                                     unsigned long seed )
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -298,7 +299,7 @@ __global__ void white_spectrum_kernel(cufftDoubleComplex* data,
    // Generate uniform random phase [0, 2pi)
    double phi = curand_uniform_double(&state) * 2.0 * M_PI;
 
-   if ( ik == 0 ) {
+   if (( ik == 0 ) or (ik > kcut)){
      data[i].x = 0.;
      data[i].y = 0.;
    }else{
@@ -311,7 +312,7 @@ __global__ void white_spectrum_kernel(cufftDoubleComplex* data,
 }
 //--------------------------------
 void set_white_spectrum(FFTArray1D& arr,
-                        double A, double dk,
+                        double A, double dk, int kcut,
                         unsigned long seed = 1234)
 { 
     if (arr.IsFourier){
@@ -319,7 +320,7 @@ void set_white_spectrum(FFTArray1D& arr,
       int grid = (arr.N + block - 1) / block;
 
       white_spectrum_kernel<<<grid, block>>>(arr.d_complex,
-                                          arr.N, A, dk, seed);
+					     arr.N, A, dk, kcut, seed);
       cudaDeviceSynchronize();
     }else{
       clean_exit_host("set_peak_spectrum works only in fourier space", 0);
