@@ -220,43 +220,41 @@ void write_complex_array(cufftDoubleComplex* psik,
     fcomplex.close();
 }
 //----------------------------
-void write_initcond(const cufftDoubleComplex* psi, 
-		    const cufftDoubleComplex* psik, 
+void write_psi(const cufftDoubleComplex* psi, 
+		    const cufftDoubleComplex* psik,
+			const std::string& filename, 
 		    double dx, double dk, int N)
 {
     // --- Ensure "data" directory exists ---
     mkdir("data", 0755);
 
-    // --- 1. Write real-space data ---
-    std::ofstream out_real("data/initcond_real.dat");
+   	// --- 2. Write Fourier-space data ---
+	std::string four_fname = "data/" + filename + "_fourier.dat";
+	std::ofstream out_four(four_fname);
+   	if (!out_four) {
+       std::cerr << "Error: cannot open" << four_fname <<"\n";
+       return;
+   	}
+  	out_four << std::scientific << std::setprecision(8);
+    for (int i = 0; i < N; i++) {
+		int ik = fft_freq(i, N);
+       	double k = ik * dk;
+       	double re = psik[i].x;
+       	double im = psik[i].y;
+      	out_four << k << " " << re << " " << im << "\n";
+    }
+   	out_four.close();
+    // ---  Write real-space data ---
+	std::string real_fname = "data/" + filename + "_real.dat";
+	std::ofstream out_real(real_fname);
     if (!out_real) {
-        std::cerr << "Error: cannot open data/initcond_real.dat\n";
+        std::cerr << "Error: cannot open" << real_fname <<"\n";
         return;
     }
-
     out_real << std::scientific << std::setprecision(8);
     for (int i = 0; i < N; i++) {
         double x = i * dx;
         out_real << x << " " << psi[i].x << " " <<psi[i].y << "\n";
     }
     out_real.close();
-
-    // --- 2. Write Fourier-space data ---
-    std::ofstream out_four("data/initcond_fourier.dat");
-    if (!out_four) {
-        std::cerr << "Error: cannot open data/initcond_fourier.dat\n";
-        return;
-    }
-
-    out_four << std::scientific << std::setprecision(8);
-    const cufftDoubleComplex* psik_c = reinterpret_cast<const cufftDoubleComplex*>(psik);
-
-    for (int i = 0; i < N; i++) {
-	int ik = fft_freq(i, N);
-        double k = ik * dk;
-        double re = psik_c[i].x;
-        double im = psik_c[i].y;
-        out_four << k << " " << re << " " << im << "\n";
-    }
-    out_four.close();
 }

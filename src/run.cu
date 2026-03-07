@@ -135,6 +135,15 @@ int main() {
     //write_diag(Diag);
     //write_data(d_psi);
     out.close();
+// copy final psi to host
+    copy_FFTArray_host_complex(psik, d_psi);
+    fft_inverse_inplace(plan, d_psi);
+    normalize_fft(d_psi);
+    copy_FFTArray_host_complex(psi, d_psi);
+// and write it to file
+	std::cout << "Writing final psi to files .." << std::endl;
+    write_psi(psi, psik, "final", dx, dk, N);
+    std::cout << "..done" << std::endl;
 	std::cout << "============================================="<<std::endl;
 // endsection
 // section : clean up 

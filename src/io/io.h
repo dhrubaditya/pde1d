@@ -8,11 +8,10 @@
 SParams read_Sparams(const char* filename);
 RParams read_Rparams(const char* filename);
 IParams read_icond(const std::string& filename);
-void write_initcond(const cufftDoubleComplex* psi,
-		    const cufftDoubleComplex* psik,
-		    double dx,
-		    double dk,
-		    int N);
+void write_psi(const cufftDoubleComplex* psi,
+            const cufftDoubleComplex* psik,
+            const std::string& filename, 
+            double dx, double dk, int N);
 //void read_initcond(double* psi,
 //   double* psik, int N, RParams RP);
 void write_spectrum(const double* Ek, int N, double dk, int Q);

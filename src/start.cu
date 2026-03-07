@@ -86,7 +86,7 @@ int main() {
     CUDA_CHECK(cudaMemcpy(Ek, d_Ek, sizeof(double) * N,
 			  cudaMemcpyDeviceToHost));
     std::cout << "Writing intial condition to files .." << std::endl;
-    write_initcond(psi, psik, dx, dk, N);
+    write_psi(psi, psik, "initcond", dx, dk, N);
     std::cout << "..done" << std::endl;
     std::cout << "Writing intial energy spectrum file .." << std::endl;
     write_spectrum(Ek, N, dk, 0);
