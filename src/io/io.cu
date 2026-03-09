@@ -129,6 +129,48 @@ RParams read_Rparams(const char* filename) {
     return p;
 }
 //-------------------------------------------------
+std::vector<int> read_vec_int(std::string& value){
+  // read value = (x,y,z) into a integer vector (x,y,z)
+  std::vector<int> temp_kk;
+  std::stringstream ss(value);
+  std::string segment;
+  if (value.front() == '(' && value.back() == ')') {
+    value = value.substr(1, value.size() - 2); // Remove '(' and ')'
+    // 
+    while (std::getline(ss, segment, ',')) {
+      // Trim whitespace from the segment
+      segment = trim(segment);
+      if (!segment.empty()) {
+	temp_kk.push_back(std::stoi(segment));
+      }
+    }
+  }else{
+    clean_exit_host("format vector = (x,y,z) needed", 1);
+  }
+  return temp_kk;
+}
+//-------------------------------------------------
+std::vector<double> read_vec_double(std::string& value){
+  // read value = (x,y,z) into a double vector (x,y,z)
+  std::vector<double> temp_amp;
+  std::stringstream ss(value);
+  std::string segment;
+  if (value.front() == '(' && value.back() == ')') {
+    value = value.substr(1, value.size() - 2); // Remove '(' and ')'
+    //              
+    while (std::getline(ss, segment, ',')) {
+      // Trim whitespace from the segment
+      segment = trim(segment);
+      if (!segment.empty()) {
+	temp_amp.push_back(std::stod(segment));
+      }
+    }
+  }else{
+      clean_exit_host("format vector = (x,y,z) needed", 1);
+  }
+  return temp_amp;
+}
+//-------------------------------------------------
 IParams read_icond(const std::string& filename) {
     IParams p;  // start with defaults
 
@@ -138,37 +180,51 @@ IParams read_icond(const std::string& filename) {
 	clean_exit_host("No input file", 1);
         return p;  // return defaults if file missing
     }
-
     std::string line;
     while (std::getline(in, line)) {
-        if (line.empty() || line[0] == '#') continue;  // skip empty and comments
+        if (line.empty() || line[0] == '#') continue;
 
         std::istringstream iss(line);
         std::string key, eq, value;
-        if (!(iss >> key >> eq >> value)) continue;
-
-        // trim possible whitespace around key/value
-        /*auto trim = [](std::string s) {
-            size_t start = s.find_first_not_of(" \t");
-            size_t end = s.find_last_not_of(" \t");
-            return (start == std::string::npos) ? std::string() : s.substr(start, end - start + 1);
-        };*/
-        key = trim(key);
+        
+        // Read key, '=', and the rest of the line as 'value'
+        if (!(iss >> key >> eq)) continue;
+        
+        // Get the rest of the line (the value part)
+        std::getline(iss >> std::ws, value); 
         value = trim(value);
 
-        if (key == "FOURIER") p.FOURIER = (value == "true" || value == "1");
-        else if (key == "ITYPE") p.ITYPE = value;
-        else if (key == "A") p.A = std::stod(value);
-        else if (key == "xi") p.xi = std::stod(value);
-        else if (key == "kmax") p.kmax = std::stod(value);
-        else if (key == "kmin") p.kmin = std::stod(value);
-        else if (key == "kpeak") p.kpeak = std::stod(value);
+        if (key == "FOURIER") {
+            p.FOURIER = (value == "true" || value == "1");
+        }
+        else if (key == "ITYPE") {
+            p.ITYPE = value;
+        }
+        else if (key == "A") {
+            p.A = std::stod(value);
+        }
+        else if (key == "xi") {
+            p.xi = std::stod(value);
+        }
+        else if (key == "kmax") {
+            p.kmax = std::stod(value);
+        }
+        else if (key == "kmin") {
+            p.kmin = std::stod(value);
+        }
+        else if (key == "kpeak") {
+            p.kpeak = std::stod(value);
+        }
+        else if (key == "kval") {
+	  p.kval = read_vec_int(value);
+	}
+	else if (key == "amp") {
+	  p.amp = read_vec_double(value);
+	}
     }
     return p;
 }
-//
-
-
+//------------------------------------------------//
 void write_spectrum(const double* spectrum, int N, double dk, int Q)
 {
     // Ensure the directory exists

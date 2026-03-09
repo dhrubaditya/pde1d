@@ -327,7 +327,62 @@ void set_white_spectrum(FFTArray1D& arr,
     }
 }
 // ---------------------
-// Kernel to set power-law spectrum using Mersenne Twister RNG
+// Kernel to set amplitude at a fixed k
+__global__ void fixk_spectrum_kernel(cufftDoubleComplex* data,
+		                    int N,
+                                    double A, double dk,
+                                    int kf,
+                                    unsigned long seed)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= N) return;
+    int ifreq = fft_freq(i, N) ;
+    int ik = abs(ifreq);
+    double re = 0.0;
+    double im = 0.0;
+
+   // 
+   curandStatePhilox4_32_10_t state;
+   curand_init(seed + i, 0, 0, &state); 
+
+   // Generate uniform random phase [0, 2pi)
+   double phi = curand_uniform_double(&state) * 2.0 * M_PI;
+
+  // Amplitude such that |F(k)|^2 = A for k = kf, zero otherwise
+   if(ik == kf){
+     re = A / sqrt(2.) ;
+     im = A / sqrt(2.) ;
+     data[i].x = re;
+     data[i].y = im;
+   }else{
+    data[i].x = 0;
+    data[i].y = 0;
+   }
+   if ( i == 0 ) {
+     data[i].x = 0.;
+     data[i].y = 0.;
+   }
+}
+//--------------------------------
+void set_fixk_spectrum(FFTArray1D& arr,
+		       double A, double dk,
+		       int kf, 
+		       unsigned long seed = 1234)
+{ 
+    if (arr.IsFourier){
+      int block = 256;
+      int grid = (arr.N + block - 1) / block;
+
+      fixk_spectrum_kernel<<<grid, block>>>(arr.d_complex,
+                                          arr.N,
+                                          A, dk, kf, seed);
+      cudaDeviceSynchronize();
+    }else{
+      clean_exit_host("set_fixk_spectrum works only in fourier space", 0);
+    }
+}
+//-------------------------------------------//
+// Kernel to set peak spectrum using Mersenne Twister RNG
 __global__ void peak_spectrum_kernel(cufftDoubleComplex* data,
 		                    int N,
                                     double A, double dk,
