@@ -2,7 +2,7 @@ import numpy as np
 import sys as sys
 import matplotlib.pyplot as plt
 
-default = "initcond"
+default = "final"
 # Use the first argument after the script name if provided
 value = sys.argv[1] if len(sys.argv) > 1 else default
 fname = "data/"+value+"_real.dat"

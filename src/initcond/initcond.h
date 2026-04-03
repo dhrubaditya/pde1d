@@ -13,7 +13,7 @@ struct IParams {
   int kmax = 0;
   int kmin = 0;
   int kpeak = 1;
-  int kno = 3;
+  int kno = 1;
   std::vector<int> kval;
   std::vector<double> amp;
 };

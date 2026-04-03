@@ -15,8 +15,8 @@ void set_initcond_fourier(FFTArray1D& d_psi, double dk, IParams& IC){
     std::cout << "Implementing power law spectrum with:" << std::endl;
     std::cout << "Amplitude = " << IC.A << std::endl;
     std::cout << "exponent = " << IC.xi << std::endl;
-    std::cout << "between, kmin = " << IC.kmax << std::endl;
-    std::cout << "and kmax = " << IC.kmin << std::endl;
+    std::cout << "between, kmin = " << IC.kmin << std::endl;
+    std::cout << "and kmax = " << IC.kmax << std::endl;
     set_power_law_spectrum(d_psi, 
 			   IC.A, IC.xi,
 			   IC.kmin, IC.kmax,
@@ -36,9 +36,10 @@ void set_initcond_fourier(FFTArray1D& d_psi, double dk, IParams& IC){
     for(int ik=0; ik < IC.kno ; ik++){
       std::cout << "at kval = " << IC.kval[ik] << std::endl;
       std::cout << "with amplitude = " << IC.amp[ik] << std::endl;
+      bool ladd = true;
       set_fixk_spectrum(d_psi, IC.amp[ik],
 			dk, IC.kval[ik],
-			seed);
+			seed, ladd);
     }
   }
   else if (IC.ITYPE == "white") {

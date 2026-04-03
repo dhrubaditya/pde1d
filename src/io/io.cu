@@ -132,11 +132,11 @@ RParams read_Rparams(const char* filename) {
 std::vector<int> read_vec_int(std::string& value){
   // read value = (x,y,z) into a integer vector (x,y,z)
   std::vector<int> temp_kk;
-  std::stringstream ss(value);
   std::string segment;
   if (value.front() == '(' && value.back() == ')') {
     value = value.substr(1, value.size() - 2); // Remove '(' and ')'
     // 
+    std::stringstream ss(value);
     while (std::getline(ss, segment, ',')) {
       // Trim whitespace from the segment
       segment = trim(segment);
@@ -153,10 +153,10 @@ std::vector<int> read_vec_int(std::string& value){
 std::vector<double> read_vec_double(std::string& value){
   // read value = (x,y,z) into a double vector (x,y,z)
   std::vector<double> temp_amp;
-  std::stringstream ss(value);
   std::string segment;
   if (value.front() == '(' && value.back() == ')') {
     value = value.substr(1, value.size() - 2); // Remove '(' and ')'
+    std::stringstream ss(value);
     //              
     while (std::getline(ss, segment, ',')) {
       // Trim whitespace from the segment
@@ -208,6 +208,7 @@ IParams read_icond(const std::string& filename) {
         }
         else if (key == "kmax") {
             p.kmax = std::stod(value);
+	    std::cout<<"kmax="<<p.kmax<<std::endl;
         }
         else if (key == "kmin") {
             p.kmin = std::stod(value);
@@ -221,6 +222,13 @@ IParams read_icond(const std::string& filename) {
 	else if (key == "amp") {
 	  p.amp = read_vec_double(value);
 	}
+    }
+    int ksize = static_cast<int>(p.kval.size());
+    int asize = static_cast<int>(p.amp.size());
+    if (ksize == asize){
+      p.kno = ksize;
+    }else{
+      clean_exit_host("kval and amp are not the same size!",1);
     }
     return p;
 }

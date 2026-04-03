@@ -64,7 +64,7 @@ void set_peak_spectrum(FFTArray1D& arr,
 void set_fixk_spectrum(FFTArray1D& arr,
 		       double A, double dk,
 		       int kf, 
-		       unsigned long seed);
+		       unsigned long seed, bool ladd);
 void set_ksqr_exp_k_spectrum(FFTArray1D& arr,
                                  double A, double dk,
                                  int kf,

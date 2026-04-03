@@ -329,15 +329,13 @@ void set_white_spectrum(FFTArray1D& arr,
 // ---------------------
 // Kernel to set amplitude at a fixed k
 __global__ void fixk_spectrum_kernel(cufftDoubleComplex* data,
-		                    int N,
-                                    double A, double dk,
-                                    int kf,
-                                    unsigned long seed)
+				     int N,double A, double dk,
+				     int kf, unsigned long seed,
+				     bool ladd)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= N) return;
-    int ifreq = fft_freq(i, N) ;
-    int ik = abs(ifreq);
+    int ik = fft_freq(i, N) ;
     double re = 0.0;
     double im = 0.0;
 
@@ -349,33 +347,31 @@ __global__ void fixk_spectrum_kernel(cufftDoubleComplex* data,
    double phi = curand_uniform_double(&state) * 2.0 * M_PI;
 
   // Amplitude such that |F(k)|^2 = A for k = kf, zero otherwise
-   if(ik == kf){
+   if (ik == kf){
      re = A / sqrt(2.) ;
      im = A / sqrt(2.) ;
+   }else{
+     re=0.; im = 0.;
+   }
+   if (ladd){
+     data[i].x += re;
+     data[i].y += im;
+   }else{
      data[i].x = re;
      data[i].y = im;
-   }else{
-    data[i].x = 0;
-    data[i].y = 0;
-   }
-   if ( i == 0 ) {
-     data[i].x = 0.;
-     data[i].y = 0.;
    }
 }
 //--------------------------------
 void set_fixk_spectrum(FFTArray1D& arr,
-		       double A, double dk,
-		       int kf, 
-		       unsigned long seed = 1234)
+		       double A, double dk, int kf, 
+		       unsigned long seed = 1234, bool ladd=false)
 { 
     if (arr.IsFourier){
       int block = 256;
       int grid = (arr.N + block - 1) / block;
 
-      fixk_spectrum_kernel<<<grid, block>>>(arr.d_complex,
-                                          arr.N,
-                                          A, dk, kf, seed);
+      fixk_spectrum_kernel<<<grid, block>>>(arr.d_complex,arr.N,
+					    A, dk, kf, seed, ladd);
       cudaDeviceSynchronize();
     }else{
       clean_exit_host("set_fixk_spectrum works only in fourier space", 0);
