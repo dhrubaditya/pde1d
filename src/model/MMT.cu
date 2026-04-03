@@ -28,6 +28,7 @@ struct MParams {
   double nu;
   double Omega0 ;
   double Epsilon;
+  double power_d;
 };
 bool mem_allocated;
 FFTPlan1D plan;
@@ -52,6 +53,7 @@ void read_mparams(const char* filename){
   h_MP = {};  // zero-initialize
   h_MP.Omega0 = 1.;
   h_MP.Epsilon = 1.;
+  h_MP.power_d = 2.;
   std::ifstream file(filename);
   if (!file.is_open()) {
     std::cerr << "Error: could not open parameter file " 
@@ -73,6 +75,7 @@ void read_mparams(const char* filename){
     else if (key == "nu") h_MP.nu = value;
     else if (key == "Omega0") h_MP.Omega0 = value;
     else if (key == "Epsilon") h_MP.Epsilon = value;
+    else if (key == "power_d") h_MP.power_d = value;
     }    
     file.close();
 }
@@ -85,6 +88,7 @@ void test_model_param(){
   std::cout << "beta  = " << h_MP1.beta  << "\n";
   std::cout << "nu    = " << (h_MP1.nu)  << "\n";
   std::cout << "Omega0    = " << h_MP1.Omega0  << "\n";
+  std::cout << "power_d    = " << h_MP1.power_d  << "\n";
   std::cout << "Epsilon    = " << h_MP1.Epsilon  << "\n";
 
 }
@@ -131,7 +135,7 @@ __device__ cufftDoubleComplex Green(double kk){
   // G = -I * k^{alpha} - nu * k^2 
   double Omega = d_MP.Omega0 * pow(kk,d_MP.alpha);
   cufftDoubleComplex G;
-  G.x = -d_MP.nu * kk * kk;
+  G.x = -d_MP.nu * pow(kk, d_MP.power_d) ;
   G.y = -Omega;
   return G;
 }
